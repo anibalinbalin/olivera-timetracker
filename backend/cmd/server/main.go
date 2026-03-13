@@ -61,6 +61,13 @@ func main() {
 		r.Post("/api/captures", handlers.CreateCapture(database, screenshotDir))
 		r.Get("/api/captures", handlers.ListCaptures(database))
 		r.Put("/api/captures/{id}", handlers.ReassignCapture(database))
+
+		r.Get("/api/entries", handlers.ListEntries(database))
+		r.Post("/api/entries", handlers.CreateEntry(database))
+		r.Post("/api/entries/generate", handlers.GenerateEntriesHandler(database))
+		r.Get("/api/entries/export", handlers.ExportEntries(database))
+		r.Put("/api/entries/{id}", handlers.UpdateEntry(database))
+		r.Put("/api/entries/{id}/status", handlers.UpdateEntryStatus(database))
 	})
 
 	// Graceful shutdown
