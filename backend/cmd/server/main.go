@@ -98,6 +98,17 @@ func main() {
 	go workers.StartOCRWorker(workerCtx, database, ocrClient)
 	go workers.StartCleanupWorker(workerCtx, database)
 
+	// Categorizer worker
+	geminiKey := envOr("GEMINI_API_KEY", "")
+	var categorizer services.Categorizer
+	if geminiKey != "" {
+		categorizer = &services.GeminiCategorizer{APIKey: geminiKey, Model: "gemini-3.1-flash-lite"}
+	} else {
+		log.Println("GEMINI_API_KEY not set, categorization disabled")
+		categorizer = &services.NoopCategorizer{}
+	}
+	go workers.StartCategorizerWorker(workerCtx, database, categorizer)
+
 	<-ctx.Done()
 	workerCancel()
 	log.Println("shutting down...")
