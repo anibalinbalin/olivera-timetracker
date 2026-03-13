@@ -96,6 +96,7 @@ func main() {
 	}
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	go workers.StartOCRWorker(workerCtx, database, ocrClient)
+	go workers.StartCleanupWorker(workerCtx, database)
 
 	<-ctx.Done()
 	workerCancel()
