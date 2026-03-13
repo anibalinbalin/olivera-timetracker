@@ -50,6 +50,12 @@ func main() {
 		r.Post("/api/matters", handlers.CreateMatter(database))
 		r.Put("/api/matters/{id}", handlers.UpdateMatter(database))
 		r.Delete("/api/matters/{id}", handlers.DeleteMatter(database))
+
+		r.Get("/api/users", handlers.ListUsers(database))
+		r.Post("/api/users", handlers.CreateUser(database))
+
+		r.Get("/api/settings", handlers.GetSettings(database))
+		r.Put("/api/settings", handlers.UpdateSettings(database))
 	})
 
 	// Graceful shutdown
