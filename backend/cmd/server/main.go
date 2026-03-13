@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 	"github.com/olivera/timetracker/internal/db"
 	"github.com/olivera/timetracker/internal/handlers"
 	"github.com/olivera/timetracker/internal/middleware"
@@ -34,6 +35,14 @@ func main() {
 	defer database.Close()
 
 	r := chi.NewRouter()
+
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-API-Key"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
 	// Public
 	r.Get("/api/health", handlers.Health)
@@ -71,6 +80,17 @@ func main() {
 		r.Put("/api/entries/{id}", handlers.UpdateEntry(database))
 		r.Put("/api/entries/{id}/status", handlers.UpdateEntryStatus(database))
 	})
+
+	// Serve frontend static files with SPA fallback
+	staticDir := "./static"
+	r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		path := staticDir + req.URL.Path
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			http.ServeFile(w, req, staticDir+"/index.html")
+			return
+		}
+		http.FileServer(http.Dir(staticDir)).ServeHTTP(w, req)
+	}))
 
 	// Graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
