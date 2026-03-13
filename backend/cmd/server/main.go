@@ -19,6 +19,7 @@ func main() {
 	dbPath := envOr("DB_PATH", "timetracker.db")
 	apiKey := envOr("API_KEY", "")
 	addr := envOr("ADDR", ":8080")
+	screenshotDir := envOr("SCREENSHOT_DIR", "./screenshots")
 
 	if apiKey == "" {
 		log.Fatal("API_KEY env var required")
@@ -56,6 +57,10 @@ func main() {
 
 		r.Get("/api/settings", handlers.GetSettings(database))
 		r.Put("/api/settings", handlers.UpdateSettings(database))
+
+		r.Post("/api/captures", handlers.CreateCapture(database, screenshotDir))
+		r.Get("/api/captures", handlers.ListCaptures(database))
+		r.Put("/api/captures/{id}", handlers.ReassignCapture(database))
 	})
 
 	// Graceful shutdown
