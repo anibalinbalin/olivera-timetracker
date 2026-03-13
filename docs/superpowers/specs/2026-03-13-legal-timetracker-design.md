@@ -251,7 +251,7 @@ Configurable in settings (default 0.7). Laura tunes during beta.
 ### Beta (Laura)
 - Go binary on Synology NAS (direct, no Docker)
 - RunPod serverless for GLM-OCR 0.9B
-- Gemini API via Google Workspace (free)
+- Gemini 3.1 Flash-Lite API via Google Workspace (free tier)
 - Tailscale for remote access
 
 ### Production (post-validation)

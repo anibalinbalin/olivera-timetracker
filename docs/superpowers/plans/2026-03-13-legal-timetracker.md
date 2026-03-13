@@ -1144,10 +1144,10 @@ git add . && git commit -m "feat: build scripts, .gitignore, env examples"
 
 ---
 
-## Unresolved Questions
+## Resolved Questions
 
-1. **Synology arch** — is the Synology x86_64 or ARM? Affects Go cross-compilation target.
-2. **RunPod endpoint** — what's the exact API format for GLM-OCR on RunPod serverless? Need to test deployment first.
-3. **Gemini model** — which Gemini model to use for categorization? (gemini-pro, gemini-flash?)
-4. **Screenshot resolution** — full screen or active window only? Full screen is simpler but larger files.
-5. **Laura's first matters** — do we pre-seed some client/matter data for her beta, or does she enter manually?
+1. **Synology arch** — DS918+, Intel Celeron J3455 x86_64, 4GB RAM. `GOOS=linux GOARCH=amd64` confirmed.
+2. **RunPod endpoint** — research during Task 6 implementation.
+3. **Gemini model** — `gemini-3.1-flash-lite` ($0.25/1M input, $1.50/1M output, fastest Flash tier).
+4. **Screenshots** — active window only (not full screen). Smaller files, more relevant data.
+5. **Laura's matters** — will ask Laura directly which clients/matters to seed during onboarding.
