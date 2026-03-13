@@ -40,7 +40,16 @@ func main() {
 	// Authenticated (API key for agents, session cookie for dashboard)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.APIKeyOrSession(apiKey, database))
-		// endpoints added in subsequent tasks
+
+		r.Get("/api/clients", handlers.ListClients(database))
+		r.Post("/api/clients", handlers.CreateClient(database))
+		r.Put("/api/clients/{id}", handlers.UpdateClient(database))
+		r.Delete("/api/clients/{id}", handlers.DeleteClient(database))
+
+		r.Get("/api/matters", handlers.ListMatters(database))
+		r.Post("/api/matters", handlers.CreateMatter(database))
+		r.Put("/api/matters/{id}", handlers.UpdateMatter(database))
+		r.Delete("/api/matters/{id}", handlers.DeleteMatter(database))
 	})
 
 	// Graceful shutdown
