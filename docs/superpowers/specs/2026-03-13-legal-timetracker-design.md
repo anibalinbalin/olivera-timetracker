@@ -48,9 +48,24 @@ Passive screen capture agent + AI-powered categorization that learns from lawyer
 ```
 
 - Go binary runs directly on Synology, serves API + static SPA files
-- SQLite for storage (single file, zero config, 20 users)
+- SQLite in WAL mode with busy_timeout for concurrent writes (~40 writes/min at scale)
 - Tauri agents connect via LAN or Tailscale
 - Anthropic team tier available, reserved for premium tasks if needed
+
+---
+
+## Authentication
+
+### Beta (Laura)
+- Agent authenticates via static API key (configured in agent + backend)
+- Dashboard uses simple session cookie (email + password login)
+- All data visible to all users (single user for beta)
+
+### Production
+- Per-agent API keys provisioned by admin
+- User model gets `role` field (lawyer | admin)
+- Admin can see all users' data, lawyers see only their own
+- API key rotation support
 
 ---
 
@@ -67,6 +82,7 @@ Passive screen capture agent + AI-powered categorization that learns from lawyer
 - app_name, window_title
 - screenshot_path (nullable, temp file on disk)
 - ocr_text (permanent, from GLM-OCR)
+- ocr_status (PENDING | PROCESSING | COMPLETED | FAILED)
 - matter_id (FK, nullable — set by AI or manual)
 - ai_confidence (float 0-1)
 - created_at
@@ -74,12 +90,13 @@ Passive screen capture agent + AI-powered categorization that learns from lawyer
 ### TimeEntry
 - id, user_id, matter_id (FK)
 - date, duration_minutes
+- description (text, lawyer-written summary of work done)
 - status (DRAFT | REVIEWED | APPROVED)
 - captures[] (relation)
 - created_at, updated_at
 
 ### User
-- id, name, email, created_at
+- id, name, email, role (lawyer | admin), created_at
 
 ### Settings
 - capture_interval_seconds (default 30)
@@ -142,12 +159,25 @@ POST /api/users               — create user
 
 GET  /api/settings            — get settings
 PUT  /api/settings            — update settings
+
+GET  /api/health              — health check (status, version)
+DELETE /api/clients/:id       — soft delete client
+
+POST /api/entries/generate    — trigger time entry generation from captures
 ```
 
 ### Background Goroutines
-- **OCR worker**: picks up new captures → RunPod GLM-OCR → stores extracted text
-- **Categorizer**: batches uncategorized captures → Gemini with matter list + correction history
+- **OCR worker**: picks up captures with `ocr_status=PENDING` → sends to RunPod → stores text, sets `ocr_status=COMPLETED`. Retry with exponential backoff (3 attempts: 5s/15s/45s). Failed captures set to `ocr_status=FAILED` for manual retry.
+- **Categorizer**: batches captures with `ocr_status=COMPLETED` and no matter → Gemini with matter list + correction history
 - **Cleanup**: purges screenshots older than retention period
+
+### Time Entry Generation
+Captures are grouped into time entries automatically:
+1. Group captures by matter + contiguous time blocks (captures within 5 min of each other on same matter = one entry)
+2. Calculate duration from first to last capture in group + one capture interval (minimum 1 min)
+3. Create TimeEntry with status=DRAFT, link captures
+4. Unassigned captures (no matter) shown separately on dashboard for manual assignment before entry creation
+5. Lawyer can also manually select captures and create an entry
 
 ### Tech
 - `net/http` or `chi` router, no heavy frameworks
@@ -210,7 +240,7 @@ Configurable in settings (default 0.7). Laura tunes during beta.
 1. Agent captures → sends to backend
 2. Backend saves to disk (not SQLite)
 3. Backend sends to RunPod OCR → extracted text stored in SQLite
-4. Screenshot retained 48-72h (configurable) for OCR accuracy review
+4. Screenshot retained 72h (configurable) for OCR accuracy review
 5. Cleanup goroutine purges expired screenshots
 6. Extracted text is the permanent asset, not the screenshot
 
@@ -240,3 +270,12 @@ Configurable in settings (default 0.7). Laura tunes during beta.
 6. **In-context learning over fine-tuning** — simpler, corrections as prompt examples
 7. **Thin agent, fat server** — all logic centralized in Go backend
 8. **4 view options** — let Laura pick what works, don't assume
+
+---
+
+## Scale Considerations
+- 20 lawyers × 30s intervals × 8h/day = ~19,200 captures/day (~5M/year)
+- SQLite indexes needed: user_id, timestamp, matter_id, ocr_status
+- SQLite WAL mode + busy_timeout handles ~40 writes/min
+- Settings are global for MVP. Per-user settings if needed post-beta.
+- Bulk review operations deferred to post-MVP (known V1 limitation)
