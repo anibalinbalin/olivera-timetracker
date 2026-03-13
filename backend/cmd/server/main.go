@@ -13,6 +13,8 @@ import (
 	"github.com/olivera/timetracker/internal/db"
 	"github.com/olivera/timetracker/internal/handlers"
 	"github.com/olivera/timetracker/internal/middleware"
+	"github.com/olivera/timetracker/internal/services"
+	"github.com/olivera/timetracker/internal/workers"
 )
 
 func main() {
@@ -82,7 +84,21 @@ func main() {
 		}
 	}()
 
+	// OCR worker
+	ocrEndpoint := envOr("RUNPOD_ENDPOINT", "")
+	ocrAPIKey := envOr("RUNPOD_API_KEY", "")
+	var ocrClient services.OCRClient
+	if ocrEndpoint != "" {
+		ocrClient = &services.RunPodOCR{Endpoint: ocrEndpoint, APIKey: ocrAPIKey}
+	} else {
+		log.Println("RUNPOD_ENDPOINT not set, OCR disabled")
+		ocrClient = &services.NoopOCR{}
+	}
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	go workers.StartOCRWorker(workerCtx, database, ocrClient)
+
 	<-ctx.Done()
+	workerCancel()
 	log.Println("shutting down...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
