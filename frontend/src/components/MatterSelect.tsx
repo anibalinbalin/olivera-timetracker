@@ -20,7 +20,10 @@ export function MatterSelect({ value, onChange, matters }: Props) {
       value={value ?? ''}
       onChange={e => onChange(Number(e.target.value))}
       aria-label="Seleccionar asunto"
-      className="h-7 rounded-md border border-gray-300 bg-white px-2 text-xs outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-200 min-w-[160px]"
+      className="h-7 rounded-md bg-white px-2 text-xs outline-none min-w-[160px]"
+      style={{
+        border: '1px solid var(--neutral)',
+      }}
     >
       <option value="" disabled>Seleccionar asunto…</option>
       {Object.entries(grouped).map(([clientName, clientMatters]) => (

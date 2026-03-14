@@ -8,7 +8,6 @@ import { useMatters } from '@/hooks/useMatters'
 import { useClients } from '@/hooks/useClients'
 import { matterColor } from '@/lib/colors'
 import { MatterSelect } from '@/components/MatterSelect'
-import { Button } from '@/components/ui/button'
 import type { TimeEntry, Capture, Matter, Client } from '@/types'
 
 const GOAL_HOURS = 8
@@ -45,9 +44,9 @@ function EditableDescription({
         className="text-left w-full"
       >
         {value ? (
-          <span className="text-sm text-gray-600">{value}</span>
+          <span className="text-sm text-pretty" style={{ color: 'var(--near-black)' }}>{value}</span>
         ) : (
-          <span className="text-sm italic text-gray-400">Agregar descripción…</span>
+          <span className="text-sm italic text-gray-400 text-pretty">Agregar descripción…</span>
         )}
       </button>
     )
@@ -74,7 +73,11 @@ function EditableDescription({
       }}
       rows={2}
       aria-label="Descripción de la entrada"
-      className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200 resize-none"
+      className="w-full text-sm rounded-md px-2 py-1 outline-none resize-none"
+      style={{
+        border: '1px solid var(--neutral)',
+        color: 'var(--near-black)',
+      }}
     />
   )
 }
@@ -82,7 +85,7 @@ function EditableDescription({
 // --- Client card ---
 interface MatterGroup {
   matter: Matter
-  entries: TimeEntry[]  // original entries (for approve-all)
+  entries: TimeEntry[]
   totalMinutes: number
   displayDescription: string
   allApproved: boolean
@@ -98,21 +101,29 @@ function ClientCard({
   group,
   onApprove,
   onUpdateDescription,
+  captureConfidence,
 }: {
   group: ClientGroup
   onApprove: (id: number) => void
   onUpdateDescription: (id: number, desc: string) => void
+  captureConfidence: Map<number, number>
 }) {
   const allApproved = group.matters.every(m => m.allApproved)
 
   return (
-    <div className="rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden">
+    <div
+      className="rounded-xl bg-white overflow-hidden"
+      style={{
+        border: '1px solid var(--neutral)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+      }}
+    >
       {/* Client header */}
       <div className="flex items-center justify-between px-5 py-3 bg-gray-50/60">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-900">{group.client.name}</span>
+          <span className="font-semibold" style={{ color: 'var(--navy)' }}>{group.client.name}</span>
           {allApproved && (
-            <CheckmarkCircle02Icon size={18} className="text-green-500" aria-hidden="true" />
+            <CheckmarkCircle02Icon size={18} style={{ color: 'var(--success)' }} aria-hidden="true" />
           )}
         </div>
         <span className="text-sm font-medium text-gray-500 tabular-nums">
@@ -122,54 +133,86 @@ function ClientCard({
 
       {/* Matters + entries */}
       <div className="divide-y divide-gray-50">
-        {group.matters.map(({ matter, entries, totalMinutes, displayDescription, allApproved: matterApproved }) => (
-          <div key={matter.id} className="px-5 py-3">
-            <div className="flex items-center gap-3 py-2">
-              {/* Color dot */}
-              <div
-                className="size-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: matterColor(matter.id) }}
-              />
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-sm font-medium text-gray-800">
-                    {matter.name}{' '}
-                    <span className="text-gray-400 font-normal">({matter.matter_number})</span>
-                  </span>
-                  <span className="text-sm tabular-nums text-gray-500 shrink-0">
-                    {formatHours(totalMinutes)}h
-                  </span>
+        {group.matters.map(({ matter, entries, totalMinutes, displayDescription, allApproved: matterApproved }) => {
+          const confidence = captureConfidence.get(matter.id)
+
+          return (
+            <div key={matter.id} className="px-5 py-3">
+              <div className="flex items-center gap-3 py-2">
+                {/* Color dot */}
+                <div
+                  className="size-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: matterColor(matter.id) }}
+                />
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-medium" style={{ color: 'var(--near-black)' }}>
+                      {matter.name}{' '}
+                      <span className="text-gray-400 font-normal">({matter.matter_number})</span>
+                      {/* AI confidence badge */}
+                      {confidence != null && confidence > 0 && (
+                        <span
+                          className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                          style={{ backgroundColor: 'var(--gold)', color: 'var(--near-black)' }}
+                        >
+                          {Math.round(confidence * 100)}%
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-sm tabular-nums text-gray-500 shrink-0">
+                      {formatHours(totalMinutes)}h
+                    </span>
+                  </div>
+                  <div className="mt-0.5 border-l-2 border-gray-100 pl-3">
+                    <EditableDescription
+                      value={displayDescription}
+                      onSave={v => onUpdateDescription(entries[0].id, v)}
+                    />
+                  </div>
                 </div>
-                <div className="mt-0.5 border-l-2 border-gray-100 pl-3">
-                  <EditableDescription
-                    value={displayDescription}
-                    onSave={v => onUpdateDescription(entries[0].id, v)}
-                  />
-                </div>
-              </div>
-              {/* Approve checkbox — approves ALL entries for this matter */}
-              <button
-                type="button"
-                aria-label={matterApproved ? 'Aprobado' : 'Aprobar entrada'}
-                onClick={() => {
-                  if (!matterApproved) {
+                {/* Approve toggle */}
+                <button
+                  type="button"
+                  aria-label={matterApproved ? 'Desaprobar' : 'Aprobar entrada'}
+                  onClick={() => {
                     entries.forEach(e => {
-                      if (e.status !== 'APPROVED') onApprove(e.id)
+                      if (matterApproved) {
+                        onApprove(e.id)
+                      } else if (e.status !== 'APPROVED') {
+                        onApprove(e.id)
+                      }
                     })
+                  }}
+                  className={`px-3 py-1 rounded-md text-xs font-medium shrink-0 transition-[background-color,color,border-color] focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:outline-none ${
+                    matterApproved
+                      ? 'text-white'
+                      : 'hover:text-white'
+                  }`}
+                  style={
+                    matterApproved
+                      ? { backgroundColor: 'var(--success)' }
+                      : { border: '1px solid var(--navy)', color: 'var(--navy)' }
                   }
-                }}
-                className={`size-5 rounded border-2 flex items-center justify-center shrink-0 transition-[color,background-color,border-color] focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none ${
-                  matterApproved
-                    ? 'bg-green-500 border-green-500 text-white'
-                    : 'border-gray-300 hover:border-green-400'
-                }`}
-              >
-                {matterApproved && <Tick01Icon size={14} aria-hidden="true" />}
-              </button>
+                  onMouseEnter={e => {
+                    if (!matterApproved) {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--navy)';
+                      (e.currentTarget as HTMLElement).style.color = 'white';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!matterApproved) {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = '';
+                      (e.currentTarget as HTMLElement).style.color = 'var(--navy)';
+                    }
+                  }}
+                >
+                  {matterApproved ? '✓ Aprobado' : 'Aprobar'}
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -187,10 +230,10 @@ function UncategorizedCard({
 }) {
   if (captures.length === 0) return null
 
-  const totalMinutes = captures.length // each capture ≈ 1 min (interval)
+  const totalMinutes = captures.length
 
   return (
-    <div className="rounded-xl bg-amber-50/50 shadow-sm border border-amber-200/60 overflow-hidden">
+    <div className="rounded-xl bg-amber-50 overflow-hidden border border-amber-300">
       <div className="flex items-center justify-between px-5 py-3">
         <div className="flex items-center gap-2">
           <span className="text-amber-600" aria-hidden="true">⚠</span>
@@ -201,7 +244,6 @@ function UncategorizedCard({
         </span>
       </div>
       <div className="px-5 pb-4 space-y-2">
-        {/* Group by app */}
         {Object.entries(
           captures.reduce<Record<string, { title: string; count: number; ids: number[] }>>(
             (acc, c) => {
@@ -216,7 +258,7 @@ function UncategorizedCard({
         ).map(([app, { title, count, ids: _ids }]) => (
           <div key={app} className="flex items-center justify-between gap-3 text-sm">
             <div className="flex-1 min-w-0">
-              <span className="text-gray-700 font-medium">{app}</span>
+              <span className="font-medium" style={{ color: 'var(--near-black)' }}>{app}</span>
               <span className="text-gray-400 ml-1 truncate">— {title}</span>
             </div>
             <span className="tabular-nums text-gray-500 shrink-0">
@@ -275,6 +317,17 @@ export default function DashboardPage() {
     hasAutoGenerated.current = false
   }, [dateStr])
 
+  // Build capture confidence map: matter_id → avg ai_confidence
+  const captureConfidence = new Map<number, number>()
+  for (const c of captures) {
+    if (c.matter_id && c.ai_confidence != null && c.ai_confidence > 0) {
+      const existing = captureConfidence.get(c.matter_id)
+      if (existing == null || c.ai_confidence > existing) {
+        captureConfidence.set(c.matter_id, c.ai_confidence)
+      }
+    }
+  }
+
   // Build client groups
   const clientGroups: ClientGroup[] = buildClientGroups(entries, matters, clients)
 
@@ -291,10 +344,8 @@ export default function DashboardPage() {
       const entry = entries.find(e => e.id === id)
       if (!entry) return
       if (entry.status === 'APPROVED') {
-        // Undo: APPROVED → DRAFT
         updateStatus.mutate({ id, status: 'DRAFT' })
       } else if (entry.status === 'DRAFT') {
-        // Two-step: DRAFT → REVIEWED → APPROVED
         updateStatus.mutate({ id, status: 'REVIEWED' }, {
           onSuccess: () => updateStatus.mutate({ id, status: 'APPROVED' }),
         })
@@ -335,8 +386,8 @@ export default function DashboardPage() {
   const isLoading = entriesLoading || capturesLoading
 
   return (
-    <div className="min-h-screen bg-gray-50/50">
-      <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+    <div className="min-h-full" style={{ backgroundColor: 'var(--warm-white)' }}>
+      <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -344,11 +395,11 @@ export default function DashboardPage() {
               type="button"
               aria-label="Día anterior"
               onClick={() => setDate(d => subDays(d, 1))}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-[background-color,color] focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:outline-none"
             >
               <ArrowLeft01Icon size={20} />
             </button>
-            <h1 className="text-lg font-semibold text-gray-900">
+            <h1 className="text-lg font-semibold text-balance" style={{ color: 'var(--navy)' }}>
               {(() => {
                 const formatted = format(date, "EEEE, d 'de' MMMM", { locale: es })
                 return formatted.charAt(0).toUpperCase() + formatted.slice(1)
@@ -358,7 +409,7 @@ export default function DashboardPage() {
               type="button"
               aria-label="Día siguiente"
               onClick={() => setDate(d => addDays(d, 1))}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-[background-color,color] focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:outline-none"
             >
               <ArrowRight01Icon size={20} />
             </button>
@@ -369,15 +420,15 @@ export default function DashboardPage() {
         {/* Summary bar */}
         <div className="space-y-2">
           <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold text-gray-900">
+            <span className="text-2xl font-bold tabular-nums" style={{ color: 'var(--navy)' }}>
               Hoy: {totalHours.toFixed(1)} horas
             </span>
             <span className="text-sm text-gray-400">{GOAL_HOURS}h meta</span>
           </div>
-          <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--neutral)' }}>
             <div
-              className="h-full rounded-full bg-blue-500 transition-[width] duration-500"
-              style={{ width: `${progressPct}%` }}
+              className="h-full rounded-full transition-[width] duration-500"
+              style={{ width: `${progressPct}%`, backgroundColor: 'var(--gold)' }}
             />
           </div>
         </div>
@@ -401,6 +452,7 @@ export default function DashboardPage() {
             group={group}
             onApprove={handleToggleApprove}
             onUpdateDescription={handleUpdateDescription}
+            captureConfidence={captureConfidence}
           />
         ))}
 
@@ -418,26 +470,43 @@ export default function DashboardPage() {
         {/* Empty state */}
         {!isLoading && !generateEntries.isPending && entries.length === 0 && uncategorized.length === 0 && (
           <div className="text-center py-16 text-gray-400">
-            <p className="text-lg">Sin actividad registrada</p>
-            <p className="text-sm mt-1">Las capturas aparecerán aquí automáticamente</p>
+            <p className="text-lg text-balance">Sin actividad registrada</p>
+            <p className="text-sm mt-1 text-pretty">Las capturas aparecerán aquí automáticamente</p>
           </div>
         )}
 
         {/* Bottom actions */}
         {!isLoading && entries.length > 0 && (
           <div className="flex items-center justify-between gap-3 pt-2">
-            <Button
+            <button
+              type="button"
               onClick={handleApproveAll}
               disabled={entries.every(e => e.status === 'APPROVED')}
-              className="gap-2"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-[background-color] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:outline-none"
+              style={{ backgroundColor: 'var(--navy)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--navy-light)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--navy)' }}
             >
-              <Tick01Icon size={16} />
+              <Tick01Icon size={16} aria-hidden="true" />
               Aprobar todo
-            </Button>
-            <Button variant="outline" onClick={handleExportCSV} className="gap-2">
-              <Download01Icon size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-[background-color,color,border-color] focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:outline-none"
+              style={{ border: '1px solid var(--navy)', color: 'var(--navy)' }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--navy)';
+                (e.currentTarget as HTMLElement).style.color = 'white';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.backgroundColor = '';
+                (e.currentTarget as HTMLElement).style.color = 'var(--navy)';
+              }}
+            >
+              <Download01Icon size={16} aria-hidden="true" />
               Exportar CSV
-            </Button>
+            </button>
           </div>
         )}
       </div>
@@ -454,7 +523,6 @@ function buildClientGroups(
   const matterMap = new Map(matters.map(m => [m.id, m]))
   const clientMap = new Map(clients.map(c => [c.id, c]))
 
-  // Group entries by client_id
   const byClient = new Map<number, Map<number, TimeEntry[]>>()
 
   for (const entry of entries) {
@@ -496,14 +564,13 @@ function buildClientGroups(
           allApproved: es.every(e => e.status === 'APPROVED'),
         }
       })
-      .filter(m => m.totalMinutes > 0)  // Fix 3: exclude 0-minute matters
+      .filter(m => m.totalMinutes > 0)
 
     const totalMinutes = mattersList.reduce((sum, m) => sum + m.totalMinutes, 0)
 
     groups.push({ client, matters: mattersList, totalMinutes })
   }
 
-  // Sort by total hours desc
   groups.sort((a, b) => b.totalMinutes - a.totalMinutes)
   return groups
 }
