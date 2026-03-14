@@ -80,12 +80,17 @@ function EditableDescription({
 }
 
 // --- Client card ---
+interface MatterGroup {
+  matter: Matter
+  entries: TimeEntry[]  // original entries (for approve-all)
+  totalMinutes: number
+  displayDescription: string
+  allApproved: boolean
+}
+
 interface ClientGroup {
   client: Client
-  matters: {
-    matter: Matter
-    entries: TimeEntry[]
-  }[]
+  matters: MatterGroup[]
   totalMinutes: number
 }
 
@@ -98,9 +103,7 @@ function ClientCard({
   onApprove: (id: number) => void
   onUpdateDescription: (id: number, desc: string) => void
 }) {
-  const allApproved = group.matters.every(m =>
-    m.entries.every(e => e.status === 'APPROVED'),
-  )
+  const allApproved = group.matters.every(m => m.allApproved)
 
   return (
     <div className="rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden">
@@ -119,50 +122,52 @@ function ClientCard({
 
       {/* Matters + entries */}
       <div className="divide-y divide-gray-50">
-        {group.matters.map(({ matter, entries }) => (
+        {group.matters.map(({ matter, entries, totalMinutes, displayDescription, allApproved: matterApproved }) => (
           <div key={matter.id} className="px-5 py-3">
-            {entries.map(entry => (
-              <div key={entry.id} className="flex items-start gap-3 py-1.5">
-                {/* Color dot */}
-                <div
-                  className="mt-1.5 w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: matterColor(matter.id) }}
-                />
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-sm font-medium text-gray-800">
-                      {matter.name}{' '}
-                      <span className="text-gray-400 font-normal">({matter.matter_number})</span>
-                    </span>
-                    <span className="text-sm tabular-nums text-gray-500 shrink-0">
-                      {formatHours(entry.duration_minutes)}h
-                    </span>
-                  </div>
-                  <div className="mt-0.5 border-l-2 border-gray-100 pl-3">
-                    <EditableDescription
-                      value={entry.description ?? ''}
-                      onSave={v => onUpdateDescription(entry.id, v)}
-                    />
-                  </div>
+            <div className="flex items-start gap-3 py-1.5">
+              {/* Color dot */}
+              <div
+                className="mt-1.5 w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: matterColor(matter.id) }}
+              />
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-medium text-gray-800">
+                    {matter.name}{' '}
+                    <span className="text-gray-400 font-normal">({matter.matter_number})</span>
+                  </span>
+                  <span className="text-sm tabular-nums text-gray-500 shrink-0">
+                    {formatHours(totalMinutes)}h
+                  </span>
                 </div>
-                {/* Approve checkbox */}
-                <button
-                  type="button"
-                  aria-label={entry.status === 'APPROVED' ? 'Aprobado' : 'Aprobar entrada'}
-                  onClick={() => {
-                    if (entry.status !== 'APPROVED') onApprove(entry.id)
-                  }}
-                  className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none ${
-                    entry.status === 'APPROVED'
-                      ? 'bg-green-500 border-green-500 text-white'
-                      : 'border-gray-300 hover:border-green-400'
-                  }`}
-                >
-                  {entry.status === 'APPROVED' && <Tick01Icon size={14} />}
-                </button>
+                <div className="mt-0.5 border-l-2 border-gray-100 pl-3">
+                  <EditableDescription
+                    value={displayDescription}
+                    onSave={v => onUpdateDescription(entries[0].id, v)}
+                  />
+                </div>
               </div>
-            ))}
+              {/* Approve checkbox — approves ALL entries for this matter */}
+              <button
+                type="button"
+                aria-label={matterApproved ? 'Aprobado' : 'Aprobar entrada'}
+                onClick={() => {
+                  if (!matterApproved) {
+                    entries.forEach(e => {
+                      if (e.status !== 'APPROVED') onApprove(e.id)
+                    })
+                  }
+                }}
+                className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-[color,background-color,border-color] focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none ${
+                  matterApproved
+                    ? 'bg-green-500 border-green-500 text-white'
+                    : 'border-gray-300 hover:border-green-400'
+                }`}
+              >
+                {matterApproved && <Tick01Icon size={14} aria-hidden="true" />}
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -329,8 +334,11 @@ export default function DashboardPage() {
             >
               <ArrowLeft01Icon size={20} />
             </button>
-            <h1 className="text-lg font-semibold text-gray-900 capitalize">
-              {format(date, "EEEE, d 'de' MMMM", { locale: es })}
+            <h1 className="text-lg font-semibold text-gray-900">
+              {(() => {
+                const formatted = format(date, "EEEE, d 'de' MMMM", { locale: es })
+                return formatted.charAt(0).toUpperCase() + formatted.slice(1)
+              })()}
             </h1>
             <button
               type="button"
@@ -459,22 +467,27 @@ function buildClientGroups(
       created_at: '',
     }
 
-    const mattersList = Array.from(matterEntries.entries()).map(([matterId, es]) => ({
-      matter: matterMap.get(matterId) ?? {
-        id: matterId,
-        client_id: clientId,
-        name: es[0]?.matter_name ?? `Asunto ${matterId}`,
-        matter_number: es[0]?.matter_number ?? '',
-        is_active: true,
-        created_at: '',
-      },
-      entries: es,
-    }))
+    const mattersList = Array.from(matterEntries.entries())
+      .map(([matterId, es]) => {
+        const totalMins = es.reduce((s, e) => s + e.duration_minutes, 0)
+        return {
+          matter: matterMap.get(matterId) ?? {
+            id: matterId,
+            client_id: clientId,
+            name: es[0]?.matter_name ?? `Asunto ${matterId}`,
+            matter_number: es[0]?.matter_number ?? '',
+            is_active: true,
+            created_at: '',
+          },
+          entries: es,
+          totalMinutes: totalMins,
+          displayDescription: es.map(e => e.description).filter(Boolean).join('; '),
+          allApproved: es.every(e => e.status === 'APPROVED'),
+        }
+      })
+      .filter(m => m.totalMinutes > 0)  // Fix 3: exclude 0-minute matters
 
-    const totalMinutes = mattersList.reduce(
-      (sum, m) => sum + m.entries.reduce((s, e) => s + e.duration_minutes, 0),
-      0,
-    )
+    const totalMinutes = mattersList.reduce((sum, m) => sum + m.totalMinutes, 0)
 
     groups.push({ client, matters: mattersList, totalMinutes })
   }
