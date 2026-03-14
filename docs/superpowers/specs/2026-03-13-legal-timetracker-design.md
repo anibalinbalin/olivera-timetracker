@@ -250,14 +250,15 @@ Configurable in settings (default 0.7). Laura tunes during beta.
 
 ### Beta (Laura)
 - Go binary on Synology NAS (direct, no Docker)
-- RunPod serverless for GLM-OCR 0.9B
-- Gemini 3.1 Flash-Lite API via Google Workspace (free tier)
+- RunPod pod with DeepSeek-OCR 3.3B via vLLM (~$1/day for 20 lawyers)
+- Gemini 2.5 Flash-Lite API via Google Workspace (free tier)
 - Tailscale for remote access
 
-### Production (post-validation)
-- Mac Mini M4 replaces RunPod (same model, point backend to localhost)
+### Production
+- Same RunPod pod for OCR (~$30/month, cheaper than buying hardware)
 - Scale to 20 lawyers
 - Same Go binary, same SQLite, same everything
+- If data privacy becomes critical or scale exceeds 20 lawyers, evaluate local GPU
 
 ---
 
@@ -265,7 +266,7 @@ Configurable in settings (default 0.7). Laura tunes during beta.
 1. **No Docker** — Go binary runs directly on Synology, faster
 2. **SQLite over Postgres** — zero config, single file, sufficient for 20 users
 3. **Gemini over Claude for categorization** — free via Google Workspace
-4. **RunPod for beta OCR** — validate before buying Mac Mini M4
+4. **RunPod for OCR** — DeepSeek-OCR 3.3B via vLLM, ~$30/mo at scale, no hardware to buy/maintain
 5. **Screenshots as temp files** — OCR text is the permanent record
 6. **In-context learning over fine-tuning** — simpler, corrections as prompt examples
 7. **Thin agent, fat server** — all logic centralized in Go backend
