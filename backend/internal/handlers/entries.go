@@ -221,13 +221,21 @@ func UpdateEntryStatus(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		// Validate transition: DRAFT→REVIEWED→APPROVED only
-		validTransitions := map[string]string{
-			"DRAFT":    "REVIEWED",
-			"REVIEWED": "APPROVED",
+		// Validate transitions: forward + undo
+		validTransitions := map[string][]string{
+			"DRAFT":    {"REVIEWED"},
+			"REVIEWED": {"APPROVED", "DRAFT"},
+			"APPROVED": {"DRAFT"},
 		}
-		allowed, ok := validTransitions[currentStatus]
-		if !ok || allowed != body.Status {
+		allowed := validTransitions[currentStatus]
+		valid := false
+		for _, a := range allowed {
+			if a == body.Status {
+				valid = true
+				break
+			}
+		}
+		if !valid {
 			WriteError(w, http.StatusBadRequest,
 				fmt.Sprintf("invalid transition: %s → %s", currentStatus, body.Status))
 			return

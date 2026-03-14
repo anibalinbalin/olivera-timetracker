@@ -286,12 +286,15 @@ export default function DashboardPage() {
   const totalHours = totalMinutes / 60
   const progressPct = Math.min((totalHours / GOAL_HOURS) * 100, 100)
 
-  const handleApprove = useCallback(
-    async (id: number) => {
-      // Backend requires DRAFT → REVIEWED → APPROVED (two steps)
+  const handleToggleApprove = useCallback(
+    (id: number) => {
       const entry = entries.find(e => e.id === id)
-      if (!entry || entry.status === 'APPROVED') return
-      if (entry.status === 'DRAFT') {
+      if (!entry) return
+      if (entry.status === 'APPROVED') {
+        // Undo: APPROVED → DRAFT
+        updateStatus.mutate({ id, status: 'DRAFT' })
+      } else if (entry.status === 'DRAFT') {
+        // Two-step: DRAFT → REVIEWED → APPROVED
         updateStatus.mutate({ id, status: 'REVIEWED' }, {
           onSuccess: () => updateStatus.mutate({ id, status: 'APPROVED' }),
         })
@@ -311,7 +314,7 @@ export default function DashboardPage() {
     const pending = entries.filter(e => e.status !== 'APPROVED')
     if (pending.length === 0) return
     if (!window.confirm(`¿Aprobar ${pending.length} entradas?`)) return
-    pending.forEach(e => handleApprove(e.id))
+    pending.forEach(e => handleToggleApprove(e.id))
   }
 
   const handleExportCSV = async () => {
@@ -396,7 +399,7 @@ export default function DashboardPage() {
           <ClientCard
             key={group.client.id}
             group={group}
-            onApprove={handleApprove}
+            onApprove={handleToggleApprove}
             onUpdateDescription={handleUpdateDescription}
           />
         ))}
