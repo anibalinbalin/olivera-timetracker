@@ -99,7 +99,7 @@ Passive screen capture agent + AI-powered categorization that learns from lawyer
 - id, name, email, role (lawyer | admin), created_at
 
 ### Settings
-- capture_interval_seconds (default 30)
+- capture_interval_seconds (default 60)
 - screenshot_retention_hours (default 72)
 - ocr_enabled (default true)
 - categorization_confidence_threshold (default 0.7)
@@ -250,12 +250,12 @@ Configurable in settings (default 0.7). Laura tunes during beta.
 
 ### Beta (Laura)
 - Go binary on Synology NAS (direct, no Docker)
-- RunPod pod with DeepSeek-OCR 3.3B via vLLM (~$1/day for 20 lawyers)
+- RunPod pod with DeepSeek-OCR 3.3B via vLLM (~$15/mo for 20 lawyers at 60s intervals)
 - Gemini 2.5 Flash-Lite API via Google Workspace (free tier)
 - Tailscale for remote access
 
 ### Production
-- Same RunPod pod for OCR (~$30/month, cheaper than buying hardware)
+- Same RunPod pod for OCR (~$15/month at 60s capture interval)
 - Scale to 20 lawyers
 - Same Go binary, same SQLite, same everything
 - If data privacy becomes critical or scale exceeds 20 lawyers, evaluate local GPU
@@ -275,7 +275,7 @@ Configurable in settings (default 0.7). Laura tunes during beta.
 ---
 
 ## Scale Considerations
-- 20 lawyers × 30s intervals × 8h/day = ~19,200 captures/day (~5M/year)
+- 20 lawyers × 60s intervals × 8h/day = ~9,600 captures/day (~2.5M/year)
 - SQLite indexes needed: user_id, timestamp, matter_id, ocr_status
 - SQLite WAL mode + busy_timeout handles ~40 writes/min
 - Settings are global for MVP. Per-user settings if needed post-beta.
