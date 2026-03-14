@@ -37,6 +37,7 @@ function EditableDescription({
     return (
       <button
         type="button"
+        aria-label="Editar descripción"
         onClick={() => {
           setDraft(value)
           setEditing(true)
@@ -46,7 +47,7 @@ function EditableDescription({
         {value ? (
           <span className="text-sm text-gray-600">{value}</span>
         ) : (
-          <span className="text-sm italic text-gray-400">Agregar descripcion...</span>
+          <span className="text-sm italic text-gray-400">Agregar descripción…</span>
         )}
       </button>
     )
@@ -72,6 +73,7 @@ function EditableDescription({
         }
       }}
       rows={2}
+      aria-label="Descripción de la entrada"
       className="w-full text-sm border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200 resize-none"
     />
   )
@@ -107,7 +109,7 @@ function ClientCard({
         <div className="flex items-center gap-2">
           <span className="font-semibold text-gray-900">{group.client.name}</span>
           {allApproved && (
-            <CheckmarkCircle02Icon size={18} className="text-green-500" />
+            <CheckmarkCircle02Icon size={18} className="text-green-500" aria-hidden="true" />
           )}
         </div>
         <span className="text-sm font-medium text-gray-500 tabular-nums">
@@ -137,7 +139,7 @@ function ClientCard({
                       {formatHours(entry.duration_minutes)}h
                     </span>
                   </div>
-                  <div className="mt-0.5 pl-0.5 border-l-2 border-gray-100 pl-3">
+                  <div className="mt-0.5 border-l-2 border-gray-100 pl-3">
                     <EditableDescription
                       value={entry.description ?? ''}
                       onSave={v => onUpdateDescription(entry.id, v)}
@@ -147,10 +149,11 @@ function ClientCard({
                 {/* Approve checkbox */}
                 <button
                   type="button"
+                  aria-label={entry.status === 'APPROVED' ? 'Aprobado' : 'Aprobar entrada'}
                   onClick={() => {
                     if (entry.status !== 'APPROVED') onApprove(entry.id)
                   }}
-                  className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                  className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none ${
                     entry.status === 'APPROVED'
                       ? 'bg-green-500 border-green-500 text-white'
                       : 'border-gray-300 hover:border-green-400'
@@ -185,7 +188,7 @@ function UncategorizedCard({
     <div className="rounded-xl bg-amber-50/50 shadow-sm border border-amber-200/60 overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3">
         <div className="flex items-center gap-2">
-          <span className="text-amber-600">⚠</span>
+          <span className="text-amber-600" aria-hidden="true">⚠</span>
           <span className="font-semibold text-amber-800">Sin categorizar</span>
         </div>
         <span className="text-sm font-medium text-amber-600 tabular-nums">
@@ -289,14 +292,18 @@ export default function DashboardPage() {
   )
 
   const handleApproveAll = () => {
-    entries
-      .filter(e => e.status !== 'APPROVED')
-      .forEach(e => updateStatus.mutate({ id: e.id, status: 'APPROVED' }))
+    const pending = entries.filter(e => e.status !== 'APPROVED')
+    if (pending.length === 0) return
+    if (!window.confirm(`¿Aprobar ${pending.length} entradas?`)) return
+    pending.forEach(e => updateStatus.mutate({ id: e.id, status: 'APPROVED' }))
   }
 
   const handleExportCSV = async () => {
     const params = new URLSearchParams({ from: dateStr, to: dateStr, status: 'APPROVED' })
-    const res = await fetch(`/api/entries/export?${params}`, { credentials: 'include' })
+    const res = await fetch(`/api/entries/export?${params}`, {
+      credentials: 'include',
+      headers: { 'X-API-Key': 'test' },
+    })
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -316,8 +323,9 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              aria-label="Día anterior"
               onClick={() => setDate(d => subDays(d, 1))}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
             >
               <ArrowLeft01Icon size={20} />
             </button>
@@ -326,8 +334,9 @@ export default function DashboardPage() {
             </h1>
             <button
               type="button"
+              aria-label="Día siguiente"
               onClick={() => setDate(d => addDays(d, 1))}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
             >
               <ArrowRight01Icon size={20} />
             </button>
@@ -345,7 +354,7 @@ export default function DashboardPage() {
           </div>
           <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
             <div
-              className="h-full rounded-full transition-all duration-500"
+              className="h-full rounded-full transition-[width] duration-500"
               style={{
                 width: `${progressPct}%`,
                 background: `linear-gradient(90deg, #3B82F6, #10B981)`,
@@ -356,13 +365,13 @@ export default function DashboardPage() {
 
         {/* Loading state */}
         {isLoading && (
-          <div className="text-center py-12 text-gray-400 text-sm">Cargando...</div>
+          <div className="text-center py-12 text-gray-400 text-sm">Cargando…</div>
         )}
 
         {/* Generating state */}
         {generateEntries.isPending && (
           <div className="text-center py-8 text-gray-400 text-sm">
-            Generando entradas...
+            Generando entradas…
           </div>
         )}
 
@@ -391,7 +400,7 @@ export default function DashboardPage() {
         {!isLoading && !generateEntries.isPending && entries.length === 0 && uncategorized.length === 0 && (
           <div className="text-center py-16 text-gray-400">
             <p className="text-lg">Sin actividad registrada</p>
-            <p className="text-sm mt-1">Las capturas apareceran aqui automaticamente</p>
+            <p className="text-sm mt-1">Las capturas aparecerán aquí automáticamente</p>
           </div>
         )}
 

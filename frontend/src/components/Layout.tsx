@@ -18,14 +18,14 @@ export function Layout() {
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none ${
                 isActive
                   ? 'bg-gray-100 text-gray-900'
                   : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
               }`
             }
           >
-            <Icon size={20} />
+            <Icon size={20} aria-hidden="true" />
             {label}
           </NavLink>
         ))}
