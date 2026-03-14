@@ -124,10 +124,10 @@ function ClientCard({
       <div className="divide-y divide-gray-50">
         {group.matters.map(({ matter, entries, totalMinutes, displayDescription, allApproved: matterApproved }) => (
           <div key={matter.id} className="px-5 py-3">
-            <div className="flex items-start gap-3 py-1.5">
+            <div className="flex items-center gap-3 py-2">
               {/* Color dot */}
               <div
-                className="mt-1.5 w-2.5 h-2.5 rounded-full shrink-0"
+                className="size-2.5 rounded-full shrink-0"
                 style={{ backgroundColor: matterColor(matter.id) }}
               />
               {/* Content */}
@@ -159,7 +159,7 @@ function ClientCard({
                     })
                   }
                 }}
-                className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-[color,background-color,border-color] focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none ${
+                className={`size-5 rounded border-2 flex items-center justify-center shrink-0 transition-[color,background-color,border-color] focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none ${
                   matterApproved
                     ? 'bg-green-500 border-green-500 text-white'
                     : 'border-gray-300 hover:border-green-400'
@@ -287,8 +287,19 @@ export default function DashboardPage() {
   const progressPct = Math.min((totalHours / GOAL_HOURS) * 100, 100)
 
   const handleApprove = useCallback(
-    (id: number) => updateStatus.mutate({ id, status: 'APPROVED' }),
-    [updateStatus],
+    async (id: number) => {
+      // Backend requires DRAFT → REVIEWED → APPROVED (two steps)
+      const entry = entries.find(e => e.id === id)
+      if (!entry || entry.status === 'APPROVED') return
+      if (entry.status === 'DRAFT') {
+        updateStatus.mutate({ id, status: 'REVIEWED' }, {
+          onSuccess: () => updateStatus.mutate({ id, status: 'APPROVED' }),
+        })
+      } else {
+        updateStatus.mutate({ id, status: 'APPROVED' })
+      }
+    },
+    [updateStatus, entries],
   )
 
   const handleUpdateDescription = useCallback(
@@ -300,7 +311,7 @@ export default function DashboardPage() {
     const pending = entries.filter(e => e.status !== 'APPROVED')
     if (pending.length === 0) return
     if (!window.confirm(`¿Aprobar ${pending.length} entradas?`)) return
-    pending.forEach(e => updateStatus.mutate({ id: e.id, status: 'APPROVED' }))
+    pending.forEach(e => handleApprove(e.id))
   }
 
   const handleExportCSV = async () => {
@@ -362,11 +373,8 @@ export default function DashboardPage() {
           </div>
           <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
             <div
-              className="h-full rounded-full transition-[width] duration-500"
-              style={{
-                width: `${progressPct}%`,
-                background: `linear-gradient(90deg, #3B82F6, #10B981)`,
-              }}
+              className="h-full rounded-full bg-blue-500 transition-[width] duration-500"
+              style={{ width: `${progressPct}%` }}
             />
           </div>
         </div>

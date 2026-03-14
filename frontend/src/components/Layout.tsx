@@ -9,7 +9,7 @@ const navItems = [
 
 export function Layout() {
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-dvh bg-gray-50">
       <nav className="w-56 bg-white border-r border-gray-200 p-4 flex flex-col gap-1">
         <h1 className="text-lg font-bold px-3 py-2 mb-4">TimeTracker</h1>
         {navItems.map(({ to, icon: Icon, label }) => (
