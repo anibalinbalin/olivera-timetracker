@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -38,24 +39,27 @@ func CreateCapture(db *sql.DB, screenshotDir string) http.HandlerFunc {
 		appName := r.FormValue("app_name")
 		windowTitle := r.FormValue("window_title")
 
+		// Image is optional (allows metadata-only captures for testing)
+		var imgData []byte
 		file, _, err := r.FormFile("image")
-		if err != nil {
-			WriteError(w, http.StatusBadRequest, "missing image field")
-			return
-		}
-		defer file.Close()
-
-		imgData, err := io.ReadAll(file)
-		if err != nil {
-			WriteError(w, http.StatusInternalServerError, "failed to read image")
-			return
+		if err == nil {
+			defer file.Close()
+			imgData, err = io.ReadAll(file)
+			if err != nil {
+				WriteError(w, http.StatusInternalServerError, "failed to read image")
+				return
+			}
 		}
 
 		// Insert capture row first (no screenshot_path yet)
+		ocrStatus := "PENDING"
+		if len(imgData) == 0 {
+			ocrStatus = "COMPLETED" // no image = skip OCR
+		}
 		res, err := db.ExecContext(r.Context(),
 			`INSERT INTO captures (user_id, timestamp, app_name, window_title, ocr_status)
-			 VALUES (?, ?, ?, ?, 'PENDING')`,
-			userID, ts, appName, windowTitle,
+			 VALUES (?, ?, ?, ?, ?)`,
+			userID, ts, appName, windowTitle, ocrStatus,
 		)
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, "db insert failed")
@@ -68,19 +72,21 @@ func CreateCapture(db *sql.DB, screenshotDir string) http.HandlerFunc {
 			return
 		}
 
-		// Save screenshot
-		path, err := storage.SaveScreenshot(screenshotDir, captureID, imgData)
-		if err != nil {
-			WriteError(w, http.StatusInternalServerError, "failed to save screenshot")
-			return
-		}
-
-		// Update screenshot_path
-		if _, err := db.ExecContext(r.Context(),
-			`UPDATE captures SET screenshot_path = ? WHERE id = ?`, path, captureID,
-		); err != nil {
-			WriteError(w, http.StatusInternalServerError, "failed to update screenshot_path")
-			return
+		// Save screenshot (if image provided)
+		var screenshotPath *string
+		if len(imgData) > 0 {
+			path, err := storage.SaveScreenshot(screenshotDir, captureID, imgData)
+			if err != nil {
+				WriteError(w, http.StatusInternalServerError, "failed to save screenshot")
+				return
+			}
+			screenshotPath = &path
+			if _, err := db.ExecContext(r.Context(),
+				`UPDATE captures SET screenshot_path = ? WHERE id = ?`, path, captureID,
+			); err != nil {
+				WriteError(w, http.StatusInternalServerError, "failed to update screenshot_path")
+				return
+			}
 		}
 
 		c := models.Capture{
@@ -89,7 +95,7 @@ func CreateCapture(db *sql.DB, screenshotDir string) http.HandlerFunc {
 			Timestamp:      ts,
 			AppName:        appName,
 			WindowTitle:    windowTitle,
-			ScreenshotPath: &path,
+			ScreenshotPath: screenshotPath,
 			OCRStatus:      "PENDING",
 		}
 		WriteJSON(w, http.StatusCreated, c)
@@ -110,8 +116,20 @@ func ListCaptures(db *sql.DB) http.HandlerFunc {
 		var args []any
 
 		if dateParam != "" {
-			query += " AND DATE(timestamp) = ?"
-			args = append(args, dateParam)
+			// Support timezone offset: ?date=2026-03-13&tz=-3
+			tzParam := q.Get("tz")
+			tzOffset := 0
+			if tzParam != "" {
+				fmt.Sscanf(tzParam, "%d", &tzOffset)
+			}
+			// Convert local date to UTC range
+			// e.g. date=2026-03-13, tz=-3 means 2026-03-13T03:00:00Z to 2026-03-14T03:00:00Z
+			query += " AND timestamp >= ? AND timestamp < ?"
+			dayStart := dateParam + "T00:00:00Z"
+			t, _ := time.Parse("2006-01-02T15:04:05Z", dayStart)
+			utcStart := t.Add(time.Duration(-tzOffset) * time.Hour)
+			utcEnd := utcStart.Add(24 * time.Hour)
+			args = append(args, utcStart.UTC().Format("2006-01-02 15:04:05+00:00"), utcEnd.UTC().Format("2006-01-02 15:04:05+00:00"))
 		}
 		if userIDParam != "" {
 			query += " AND user_id = ?"

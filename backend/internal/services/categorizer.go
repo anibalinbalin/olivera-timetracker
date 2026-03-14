@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"time"
 )
 
 type Categorizer interface {
@@ -56,30 +58,21 @@ func (g *GeminiCategorizer) Categorize(captures []CaptureContext, matters []Matt
 		},
 		"generationConfig": map[string]any{
 			"responseMimeType": "application/json",
-			"responseSchema": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"capture_id": map[string]string{"type": "integer"},
-						"matter_id":  map[string]string{"type": "integer"},
-						"confidence": map[string]string{"type": "number"},
-					},
-				},
-			},
 		},
 	}
 
 	body, _ := json.Marshal(reqBody)
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	log.Printf("categorizer: gemini responded with status %d", resp.StatusCode)
 	if resp.StatusCode != 200 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("gemini returned %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("gemini returned %d: %s", resp.StatusCode, string(respBody)[:min(300, len(respBody))])
 	}
 
 	var geminiResp struct {
@@ -97,21 +90,30 @@ func (g *GeminiCategorizer) Categorize(captures []CaptureContext, matters []Matt
 		return nil, fmt.Errorf("empty gemini response")
 	}
 
-	var rawResults []struct {
-		CaptureID  int64   `json:"capture_id"`
-		MatterID   int64   `json:"matter_id"`
-		Confidence float64 `json:"confidence"`
-	}
-	json.Unmarshal([]byte(geminiResp.Candidates[0].Content.Parts[0].Text), &rawResults)
+	// Gemini may return IDs as strings or numbers, use json.Number
+	responseText := geminiResp.Candidates[0].Content.Parts[0].Text
+	log.Printf("categorizer: gemini response: %s", responseText[:min(300, len(responseText))])
 
+	var rawResults []map[string]json.Number
+	if err := json.Unmarshal([]byte(responseText), &rawResults); err != nil {
+		return nil, fmt.Errorf("parse results: %w (text: %s)", err, responseText[:min(200, len(responseText))])
+	}
+
+	log.Printf("categorizer: parsed %d results", len(rawResults))
 	var results []CategorizeResult
 	for _, r := range rawResults {
-		mid := r.MatterID
-		results = append(results, CategorizeResult{
-			CaptureID:  r.CaptureID,
-			MatterID:   &mid,
-			Confidence: r.Confidence,
-		})
+		captureID, _ := r["capture_id"].Int64()
+		matterID, _ := r["matter_id"].Int64()
+		confidence, _ := r["confidence"].Float64()
+		log.Printf("categorizer: raw result capture=%d matter=%d conf=%.2f", captureID, matterID, confidence)
+		if captureID > 0 {
+			mid := matterID
+			results = append(results, CategorizeResult{
+				CaptureID:  captureID,
+				MatterID:   &mid,
+				Confidence: confidence,
+			})
+		}
 	}
 	return results, nil
 }
@@ -143,10 +145,17 @@ func buildCategorizationPrompt(captures []CaptureContext, matters []MatterContex
 		}
 	}
 
-	b.WriteString("\n## Instructions\n")
-	b.WriteString("Return JSON array. Each object: {capture_id, matter_id, confidence}.\n")
-	b.WriteString("confidence: 0.0-1.0. If unsure, set matter_id to 0 and low confidence.\n")
-	b.WriteString("Prefer returning 0 matter_id over a wrong match.\n")
+	b.WriteString("\n## How to Match\n")
+	b.WriteString("Use ALL available signals to match activities to matters:\n")
+	b.WriteString("1. WINDOW TITLE is the strongest signal - it often contains the matter number (e.g. 'BN-2026-001') or client name\n")
+	b.WriteString("2. OCR TEXT from the document/screen content - look for client names, matter numbers, case references, legal terms\n")
+	b.WriteString("3. APP NAME - Word/Chrome/etc gives context about the type of work\n")
+	b.WriteString("4. Google searches about specific legal topics often relate to a specific matter\n\n")
+	b.WriteString("## Instructions\n")
+	b.WriteString("Return a JSON array. Each object has: {\"capture_id\": number, \"matter_id\": number, \"confidence\": number}.\n")
+	b.WriteString("confidence: 0.0-1.0. Be GENEROUS with confidence when window title contains a matter number or client name.\n")
+	b.WriteString("If you truly cannot determine the matter, set matter_id to 0.\n")
+	b.WriteString("Most activities WILL match a matter - lawyers work on specific cases. Default to matching, not to 0.\n")
 
 	return b.String()
 }

@@ -255,6 +255,7 @@ func GenerateEntriesHandler(db *sql.DB) http.HandlerFunc {
 		var body struct {
 			UserID int64  `json:"user_id"`
 			Date   string `json:"date"`
+			TZ     int    `json:"tz"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			WriteError(w, http.StatusBadRequest, "invalid JSON")
@@ -265,7 +266,7 @@ func GenerateEntriesHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		entries, err := services.GenerateEntries(db, body.UserID, body.Date)
+		entries, err := services.GenerateEntries(db, body.UserID, body.Date, body.TZ)
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, "generation failed")
 			return

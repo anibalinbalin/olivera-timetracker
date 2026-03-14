@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "flash": {
+      "source": "runpod/skills",
+      "sourceType": "github",
+      "computedHash": "135a8c0a488aee2d1ca2170f5b8bf194febbf10bbb11c1ced3d123df0436847b"
+    },
+    "runpodctl": {
+      "source": "runpod/skills",
+      "sourceType": "github",
+      "computedHash": "9edfa8fc64bbb9d7875527033aaa8e1e3d0bae1e0cc6e27a66618d8e04f59c12"
+    }
+  }
+}

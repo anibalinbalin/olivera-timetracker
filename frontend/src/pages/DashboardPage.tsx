@@ -205,7 +205,7 @@ function UncategorizedCard({
             },
             {},
           ),
-        ).map(([app, { title, count }]) => (
+        ).map(([app, { title, count, ids: _ids }]) => (
           <div key={app} className="flex items-center justify-between gap-3 text-sm">
             <div className="flex-1 min-w-0">
               <span className="text-gray-700 font-medium">{app}</span>

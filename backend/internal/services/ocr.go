@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 type OCRClient interface {
@@ -14,48 +15,76 @@ type OCRClient interface {
 }
 
 type RunPodOCR struct {
-	Endpoint string // RunPod serverless endpoint URL
-	APIKey   string
+	Endpoint string // e.g. https://POD_ID-8000.proxy.runpod.net
+	APIKey   string // not needed for pod proxy, kept for future serverless
 }
 
 func (r *RunPodOCR) Extract(imageData []byte) (string, error) {
 	b64 := base64.StdEncoding.EncodeToString(imageData)
+	dataURL := "data:image/jpeg;base64," + b64
 
+	// DeepSeek-OCR via vLLM OpenAI-compatible API
+	// 10x compression at 97% accuracy vs GLM-OCR
 	payload := map[string]any{
-		"input": map[string]any{
-			"image": b64,
+		"model": "deepseek-ai/DeepSeek-OCR",
+		"messages": []map[string]any{
+			{
+				"role": "user",
+				"content": []map[string]any{
+					{"type": "image_url", "image_url": map[string]string{"url": dataURL}},
+					{"type": "text", "text": "Free OCR."},
+				},
+			},
 		},
+		"max_tokens":  2048,
+		"temperature": 0.0,
 	}
 	body, _ := json.Marshal(payload)
 
-	req, err := http.NewRequest("POST", r.Endpoint+"/runsync", bytes.NewReader(body))
+	client := &http.Client{Timeout: 120 * time.Second}
+	req, err := http.NewRequest("POST", r.Endpoint+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+r.APIKey)
+	if r.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+r.APIKey)
+	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode != 200 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("runpod returned %d: %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("ocr returned %d: %s", resp.StatusCode, string(respBody)[:min(200, len(respBody))])
 	}
 
-	var result struct {
-		Output struct {
-			Text string `json:"text"`
-		} `json:"output"`
-		Status string `json:"status"`
+	var chatResp struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		return "", fmt.Errorf("parse response: %w", err)
 	}
-	return result.Output.Text, nil
+
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("no choices in response")
+	}
+	return chatResp.Choices[0].Message.Content, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // NoopOCR is a stub for development/testing

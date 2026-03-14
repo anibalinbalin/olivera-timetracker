@@ -34,9 +34,10 @@ func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Ca
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, app_name, window_title, COALESCE(ocr_text, '')
 		FROM captures
-		WHERE ocr_status = 'COMPLETED' AND matter_id IS NULL
+		WHERE ocr_status = 'COMPLETED' AND matter_id IS NULL AND ai_confidence IS NULL
 		LIMIT 20`)
 	if err != nil {
+		log.Printf("categorizer: query error: %v", err)
 		return
 	}
 	defer rows.Close()
@@ -47,6 +48,7 @@ func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Ca
 		rows.Scan(&c.ID, &c.AppName, &c.WindowTitle, &c.OCRText)
 		captures = append(captures, c)
 	}
+	log.Printf("categorizer: found %d uncategorized captures", len(captures))
 	if len(captures) == 0 {
 		return
 	}
@@ -96,7 +98,11 @@ func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Ca
 		if r.MatterID != nil && *r.MatterID > 0 && r.Confidence >= threshold {
 			db.Exec("UPDATE captures SET matter_id = ?, ai_confidence = ? WHERE id = ?",
 				*r.MatterID, r.Confidence, r.CaptureID)
-			log.Printf("categorizer: capture %d → matter %d (%.2f)", r.CaptureID, *r.MatterID, r.Confidence)
+			log.Printf("categorizer: capture %d -> matter %d (%.2f)", r.CaptureID, *r.MatterID, r.Confidence)
+		} else {
+			// Mark as attempted so we skip next cycle
+			db.Exec("UPDATE captures SET ai_confidence = ? WHERE id = ? AND ai_confidence IS NULL",
+				r.Confidence, r.CaptureID)
 		}
 	}
 }

@@ -2,6 +2,7 @@ package services
 
 import (
 	"database/sql"
+	"log"
 	"math"
 	"time"
 
@@ -15,17 +16,27 @@ type captureRow struct {
 }
 
 // GenerateEntries groups unlinked captures by matter + 5-min proximity into draft time entries.
-func GenerateEntries(db *sql.DB, userID int64, date string) ([]models.TimeEntry, error) {
+func GenerateEntries(db *sql.DB, userID int64, date string, tzOffsetHours int) ([]models.TimeEntry, error) {
+	// Convert local date to UTC range using timezone offset
+	t, _ := time.Parse("2006-01-02", date)
+	utcStart := t.Add(time.Duration(-tzOffsetHours) * time.Hour)
+	utcEnd := utcStart.Add(24 * time.Hour)
+
+	log.Printf("GenerateEntries: user=%d date=%s tz=%d utcStart=%s utcEnd=%s",
+		userID, date, tzOffsetHours,
+		utcStart.UTC().Format("2006-01-02T15:04:05Z"),
+		utcEnd.UTC().Format("2006-01-02T15:04:05Z"))
+
 	rows, err := db.Query(`
 		SELECT c.id, c.matter_id, c.timestamp
 		FROM captures c
 		LEFT JOIN capture_entries ce ON ce.capture_id = c.id
 		WHERE c.user_id = ?
-		  AND DATE(c.timestamp) = ?
+		  AND c.timestamp >= ? AND c.timestamp < ?
 		  AND c.matter_id IS NOT NULL
 		  AND ce.entry_id IS NULL
 		ORDER BY c.matter_id, c.timestamp
-	`, userID, date)
+	`, userID, utcStart.UTC().Format("2006-01-02 15:04:05+00:00"), utcEnd.UTC().Format("2006-01-02 15:04:05+00:00"))
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +54,7 @@ func GenerateEntries(db *sql.DB, userID int64, date string) ([]models.TimeEntry,
 		return nil, err
 	}
 
+	log.Printf("GenerateEntries: found %d unlinked captures with matter", len(captures))
 	if len(captures) == 0 {
 		return []models.TimeEntry{}, nil
 	}

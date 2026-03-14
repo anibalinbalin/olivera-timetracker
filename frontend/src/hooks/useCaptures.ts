@@ -11,7 +11,12 @@ interface CaptureFilters {
 
 export function useCaptures(filters: CaptureFilters) {
   const params = new URLSearchParams()
-  if (filters.date) params.set('date', filters.date)
+  if (filters.date) {
+    params.set('date', filters.date)
+    // Send local timezone offset so backend filters by local day
+    const tzOffsetHours = -(new Date().getTimezoneOffset() / 60)
+    params.set('tz', String(tzOffsetHours))
+  }
   if (filters.user_id) params.set('user_id', String(filters.user_id))
   if (filters.matter_id) params.set('matter_id', String(filters.matter_id))
   if (filters.ocr_status) params.set('ocr_status', filters.ocr_status)

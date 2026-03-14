@@ -82,15 +82,16 @@ func main() {
 	})
 
 	// Serve frontend static files with SPA fallback
-	staticDir := "./static"
-	r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	staticDir := envOr("STATIC_DIR", "./static")
+	fileServer := http.FileServer(http.Dir(staticDir))
+	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
 		path := staticDir + req.URL.Path
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			http.ServeFile(w, req, staticDir+"/index.html")
+		if _, err := os.Stat(path); err == nil {
+			fileServer.ServeHTTP(w, req)
 			return
 		}
-		http.FileServer(http.Dir(staticDir)).ServeHTTP(w, req)
-	}))
+		http.ServeFile(w, req, staticDir+"/index.html")
+	})
 
 	// Graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -122,7 +123,7 @@ func main() {
 	geminiKey := envOr("GEMINI_API_KEY", "")
 	var categorizer services.Categorizer
 	if geminiKey != "" {
-		categorizer = &services.GeminiCategorizer{APIKey: geminiKey, Model: "gemini-3.1-flash-lite"}
+		categorizer = &services.GeminiCategorizer{APIKey: geminiKey, Model: "gemini-2.5-flash-lite"}
 	} else {
 		log.Println("GEMINI_API_KEY not set, categorization disabled")
 		categorizer = &services.NoopCategorizer{}

@@ -64,8 +64,10 @@ export function useUpdateEntryStatus() {
 export function useGenerateEntries() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { user_id: number; date: string }) =>
-      api<TimeEntry[]>('/entries/generate', { method: 'POST', body: JSON.stringify(data) }),
+    mutationFn: (data: { user_id: number; date: string }) => {
+      const tz = -(new Date().getTimezoneOffset() / 60)
+      return api<TimeEntry[]>('/entries/generate', { method: 'POST', body: JSON.stringify({ ...data, tz }) })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['entries'] })
       qc.invalidateQueries({ queryKey: ['captures'] })
