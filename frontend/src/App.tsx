@@ -1,11 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Layout } from './components/Layout'
-import TodayPage from './pages/TodayPage'
+import DashboardPage from './pages/DashboardPage'
 import MattersPage from './pages/MattersPage'
-import ExportPage from './pages/ExportPage'
 import SettingsPage from './pages/SettingsPage'
-import ReviewPage from './pages/ReviewPage'
 
 const queryClient = new QueryClient()
 
@@ -19,10 +17,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<Layout />}>
-            <Route path="/" element={<TodayPage />} />
-            <Route path="/review" element={<ReviewPage />} />
+            <Route path="/" element={<DashboardPage />} />
             <Route path="/matters" element={<MattersPage />} />
-            <Route path="/export" element={<ExportPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" />} />

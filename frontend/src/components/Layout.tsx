@@ -1,12 +1,10 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { Calendar01Icon, CheckmarkBadge01Icon, FolderOpenIcon, FileExportIcon, Settings01Icon } from 'hugeicons-react'
+import { Home01Icon, FolderOpenIcon, Settings01Icon } from 'hugeicons-react'
 
 const navItems = [
-  { to: '/', icon: Calendar01Icon, label: 'Today' },
-  { to: '/review', icon: CheckmarkBadge01Icon, label: 'Review' },
-  { to: '/matters', icon: FolderOpenIcon, label: 'Matters' },
-  { to: '/export', icon: FileExportIcon, label: 'Export' },
-  { to: '/settings', icon: Settings01Icon, label: 'Settings' },
+  { to: '/', icon: Home01Icon, label: 'Dashboard' },
+  { to: '/matters', icon: FolderOpenIcon, label: 'Asuntos' },
+  { to: '/settings', icon: Settings01Icon, label: 'Configuracion' },
 ]
 
 export function Layout() {
