@@ -79,6 +79,17 @@ pub fn run() {
         .expect("error running TimeTracker agent");
 }
 
+fn simple_hash(data: &[u8]) -> u64 {
+    // Fast non-crypto hash — just need to detect identical images
+    let mut h: u64 = 0xcbf29ce484222325;
+    for &b in data.iter().step_by(64) {
+        // Sample every 64th byte for speed
+        h = h.wrapping_mul(0x100000001b3);
+        h ^= b as u64;
+    }
+    h
+}
+
 fn capture_loop(config: AppConfig) {
     let buffer = OfflineBuffer::new().expect("Failed to initialize offline buffer");
     let uploader_config = uploader::UploaderConfig {
@@ -88,6 +99,8 @@ fn capture_loop(config: AppConfig) {
     };
 
     let interval = std::time::Duration::from_secs(config.capture_interval_secs);
+    let mut last_hash: u64 = 0;
+    let mut skip_count: u32 = 0;
 
     loop {
         std::thread::sleep(interval);
@@ -100,6 +113,21 @@ fn capture_loop(config: AppConfig) {
 
         match capture::capture() {
             Some(result) => {
+                // Skip if screenshot is identical to previous
+                let hash = simple_hash(&result.image_data);
+                if hash == last_hash {
+                    skip_count += 1;
+                    if skip_count % 5 == 1 {
+                        println!("  → Skipped (same screen, {} consecutive)", skip_count);
+                    }
+                    continue;
+                }
+                last_hash = hash;
+                if skip_count > 0 {
+                    println!("  → Resumed after {} identical captures", skip_count);
+                    skip_count = 0;
+                }
+
                 println!(
                     "Captured: {} - {}",
                     result.app_name,
