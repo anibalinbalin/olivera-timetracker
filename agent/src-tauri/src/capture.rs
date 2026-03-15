@@ -88,15 +88,15 @@ pub fn capture() -> Option<CaptureResult> {
         GetWindowThreadProcessId(hwnd, Some(&mut pid));
         let app_name = get_process_name(pid);
 
-        let screen_dc = GetDC(None);
+        let screen_dc = GetDC(Some(HWND::default()));
         let width = GetSystemMetrics(SM_CXSCREEN);
         let height = GetSystemMetrics(SM_CYSCREEN);
 
-        let mem_dc = CreateCompatibleDC(screen_dc);
+        let mem_dc = CreateCompatibleDC(Some(screen_dc));
         let bitmap = CreateCompatibleBitmap(screen_dc, width, height);
-        let old_bitmap = SelectObject(mem_dc, bitmap);
+        let old_bitmap = SelectObject(mem_dc, HGDIOBJ(bitmap.0));
 
-        BitBlt(mem_dc, 0, 0, width, height, screen_dc, 0, 0, SRCCOPY).ok()?;
+        BitBlt(mem_dc, 0, 0, width, height, Some(screen_dc), 0, 0, SRCCOPY).ok()?;
 
         let mut bmi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
@@ -123,9 +123,9 @@ pub fn capture() -> Option<CaptureResult> {
         );
 
         SelectObject(mem_dc, old_bitmap);
-        DeleteObject(bitmap);
-        DeleteDC(mem_dc);
-        ReleaseDC(None, screen_dc);
+        DeleteObject(HGDIOBJ(bitmap.0));
+        let _ = DeleteDC(mem_dc);
+        ReleaseDC(Some(HWND::default()), screen_dc);
 
         let mut rgb = Vec::with_capacity((width * height * 3) as usize);
         for chunk in pixels.chunks(4) {
@@ -150,13 +150,14 @@ pub fn capture() -> Option<CaptureResult> {
 #[cfg(target_os = "windows")]
 fn get_process_name(pid: u32) -> String {
     use windows::Win32::System::Threading::*;
+    use windows::core::PWSTR;
 
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
         if let Ok(handle) = handle {
             let mut buf = [0u16; 260];
             let mut size = buf.len() as u32;
-            if QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, &mut buf, &mut size).is_ok() {
+            if QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut size).is_ok() {
                 let path = String::from_utf16_lossy(&buf[..size as usize]);
                 let _ = windows::Win32::Foundation::CloseHandle(handle);
                 return path

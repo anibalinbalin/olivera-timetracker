@@ -9,7 +9,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
-    Manager,
 };
 
 static PAUSED: AtomicBool = AtomicBool::new(false);
