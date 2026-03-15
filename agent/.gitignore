@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Tauri build artifacts
+src-tauri/target/
+
+# Signing keys (NEVER commit)
+*.key
+*.key.pub

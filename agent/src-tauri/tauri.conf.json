@@ -19,6 +19,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -26,5 +27,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE0RDg5N0M5MUFGRTdCOTkKUldTWmUvNGF5WmZZRkJvR29mQ3hHdVpabkNDa21sS0trOUhsZ2RvbjhRbDRpNUNqMzU4L2pwa3kK",
+      "endpoints": [
+        "https://github.com/anibalinbalin/olivera-timetracker/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

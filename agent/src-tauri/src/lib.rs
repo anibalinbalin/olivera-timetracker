@@ -22,7 +22,29 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
+            // Check for updates on startup (silent, non-blocking)
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let updater = match tauri_plugin_updater::UpdaterExt::updater(&handle) {
+                    Ok(u) => u,
+                    Err(e) => { println!("Updater init failed: {}", e); return; }
+                };
+                match updater.check().await {
+                    Ok(Some(update)) => {
+                        println!("Update available: v{}", update.version);
+                        if let Err(e) = update.download_and_install(|_, _| {}, || {}).await {
+                            println!("Update install failed: {}", e);
+                        } else {
+                            println!("Update installed, will apply on next restart");
+                        }
+                    }
+                    Ok(None) => println!("App is up to date"),
+                    Err(e) => println!("Update check failed: {}", e),
+                }
+            });
             let config = AppConfig::load();
             let dashboard_url = config.dashboard_url.clone();
 
