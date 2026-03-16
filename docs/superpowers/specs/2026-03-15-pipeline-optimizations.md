@@ -11,19 +11,24 @@ Reduce unnecessary OCR calls, categorization calls, bandwidth, and idle CPU usag
 
 **Solution:**
 - Add `image_hash TEXT` column to `captures` table
-- Agent sends image hash (already computed via `simple_hash()`) as form field `image_hash` in upload
+- Agent computes a **full FNV-1a hash** over all JPEG bytes (NOT `simple_hash` which samples every 64th byte — too collision-prone for corpus-wide dedup). The existing `simple_hash` stays for agent-side consecutive-frame dedup only.
+- Hash is computed on the **downscaled JPEG bytes** (the final uploaded image). Existing captures in DB will have NULL `image_hash` and simply won't match — no migration issue.
+- Agent sends hash as form field `image_hash` (hex string) in multipart upload
 - `CreateCapture` handler: before saving, query `SELECT id, ocr_text, ocr_status, matter_id, ai_confidence FROM captures WHERE image_hash = ? AND ocr_status = 'COMPLETED' AND user_id = ? LIMIT 1`
-- If match found: insert new capture with `ocr_text` copied, `ocr_status = 'COMPLETED'`, `matter_id` + `ai_confidence` copied. Skip saving screenshot file entirely.
+- If match found: insert new capture with `ocr_text` copied, `ocr_status = 'COMPLETED'`, `matter_id` + `ai_confidence` copied. Skip saving screenshot file entirely. Return correct `ocr_status` in response (not hardcoded PENDING).
 - If no match: proceed as normal, store `image_hash`
 - Add index: `CREATE INDEX idx_captures_image_hash ON captures(image_hash)`
 
-**Agent change:** Send hash as string in multipart form. In `uploader.rs`, add `image_hash` field with the u64 hash formatted as hex string.
+**Agent changes:**
+- New `full_hash(data: &[u8]) -> u64` function using FNV-1a over ALL bytes
+- `uploader.rs`: accept hash param, add `image_hash` field to multipart form
+- `lib.rs`: compute full hash on final JPEG bytes, pass to uploader
 
 **Files:**
-- `backend/internal/handlers/captures.go` — hash lookup + copy logic
-- `backend/internal/db/migrations.go` — add `image_hash` column + index
+- `backend/internal/handlers/captures.go` — hash lookup + copy logic + correct response status
+- `backend/internal/db/migrations.go` — add `RunMigrations(db)` function (see Schema Changes)
 - `agent/src-tauri/src/uploader.rs` — send `image_hash` field
-- `agent/src-tauri/src/lib.rs` — pass hash to uploader
+- `agent/src-tauri/src/lib.rs` — add `full_hash()`, pass to uploader
 
 ### 2. OCR text dedup (skip re-categorization for identical text)
 
@@ -32,14 +37,15 @@ Reduce unnecessary OCR calls, categorization calls, bandwidth, and idle CPU usag
 **Solution:**
 - Add `ocr_text_hash TEXT` column to `captures` table
 - After OCR completes in `processOCRBatch`, compute hash of `ocr_text` (Go `fnv.New64a()`)
-- Query: `SELECT matter_id, ai_confidence FROM captures WHERE ocr_text_hash = ? AND matter_id IS NOT NULL AND user_id = (SELECT user_id FROM captures WHERE id = ?) LIMIT 1`
-- If match with assigned matter: copy `matter_id` + `ai_confidence`, mark as categorized
-- If no match: leave for categorizer worker as normal
+- Extend `processOCRBatch` SELECT to also fetch `user_id` (currently only fetches `id, screenshot_path`)
+- Query with direct user_id (no subquery): `SELECT matter_id, ai_confidence FROM captures WHERE ocr_text_hash = ? AND matter_id IS NOT NULL AND user_id = ? LIMIT 1`
+- If match with assigned matter: copy `matter_id` + `ai_confidence`, set `ocr_text_hash`, mark as categorized
+- If no match: store `ocr_text_hash`, leave for categorizer worker as normal
 - Add index: `CREATE INDEX idx_captures_ocr_text_hash ON captures(ocr_text_hash)`
 
 **Files:**
-- `backend/internal/workers/ocr_worker.go` — compute text hash, check for prior match
-- `backend/internal/db/migrations.go` — add `ocr_text_hash` column + index
+- `backend/internal/workers/ocr_worker.go` — add user_id to SELECT, compute text hash, check for prior match
+- `backend/internal/db/migrations.go` — add `ocr_text_hash` column + index in `RunMigrations`
 
 ### 3. Screenshot downscale before upload
 
@@ -52,7 +58,7 @@ Reduce unnecessary OCR calls, categorization calls, bandwidth, and idle CPU usag
 - OCR accuracy unaffected — text is still legible at 960x540
 
 **Files:**
-- `agent/src-tauri/src/capture.rs` — add resize step in `encode_jpeg` or before it
+- `agent/src-tauri/src/capture.rs` — add resize step before `encode_jpeg`
 
 ### 4. Worker idle backoff
 
@@ -71,24 +77,21 @@ Reduce unnecessary OCR calls, categorization calls, bandwidth, and idle CPU usag
 ## Schema Changes
 
 ```sql
--- New columns
 ALTER TABLE captures ADD COLUMN image_hash TEXT;
 ALTER TABLE captures ADD COLUMN ocr_text_hash TEXT;
-
--- Indexes
 CREATE INDEX IF NOT EXISTS idx_captures_image_hash ON captures(image_hash);
 CREATE INDEX IF NOT EXISTS idx_captures_ocr_text_hash ON captures(ocr_text_hash);
 ```
 
-Since SQLite doesn't support `ALTER TABLE ADD COLUMN IF NOT EXISTS`, use Go migration pattern: attempt ALTER, ignore "duplicate column" error.
+**Migration approach:** The existing `migrations.go` only has a `const schema` string with `CREATE TABLE IF NOT EXISTS`. Add a `RunMigrations(db *sql.DB)` function that runs `ALTER TABLE` statements with error suppression for "duplicate column name". Call it from server startup after `db.Exec(schema)`. This keeps the schema const as the source of truth for new installs while supporting incremental changes.
 
 ## Implementation Order
 
-1. Schema migration (image_hash + ocr_text_hash columns)
-2. Agent: send image_hash + screenshot downscale
-3. Backend: image hash dedup in capture handler
-4. Backend: OCR text hash dedup in OCR worker
-5. Backend: worker idle backoff
+**Optimization 3 (downscale) MUST come before Optimization 1 (hash dedup)** because the image hash is computed on the final downscaled JPEG bytes. If hash is deployed first on full-res images and then downscale changes the bytes, all existing hashes become orphaned.
 
-## Unresolved Questions
-None — all 4 optimizations are independent and low-risk.
+1. Schema migration — add `RunMigrations()` with both new columns + indexes
+2. Agent: screenshot downscale in `capture.rs`
+3. Agent: `full_hash()` + send `image_hash` in upload (computed on downscaled JPEG)
+4. Backend: image hash dedup in capture handler
+5. Backend: OCR text hash dedup in OCR worker
+6. Backend: worker idle backoff
