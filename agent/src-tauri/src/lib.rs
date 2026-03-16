@@ -38,7 +38,11 @@ pub fn run() {
                         if let Err(e) = update.download_and_install(|_, _| {}, || {}).await {
                             println!("Update install failed: {}", e);
                         } else {
-                            println!("Update installed, will apply on next restart");
+                            println!("Update installed, relaunching...");
+                            // Relaunch by spawning ourselves then exiting
+                            let current_exe = std::env::current_exe().unwrap();
+                            let _ = std::process::Command::new(current_exe).spawn();
+                            std::process::exit(0);
                         }
                     }
                     Ok(None) => println!("App is up to date"),
