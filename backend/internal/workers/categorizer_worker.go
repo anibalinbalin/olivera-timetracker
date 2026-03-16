@@ -10,21 +10,30 @@ import (
 )
 
 func StartCategorizerWorker(ctx context.Context, db *sql.DB, cat services.Categorizer) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+	baseInterval := 30 * time.Second
+	maxInterval := 120 * time.Second
+	currentInterval := baseInterval
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("categorizer worker: shutting down")
 			return
-		case <-ticker.C:
-			processCategorizationBatch(ctx, db, cat)
+		case <-time.After(currentInterval):
+			found := processCategorizationBatch(ctx, db, cat)
+			if found {
+				currentInterval = baseInterval
+			} else if currentInterval < maxInterval {
+				currentInterval = currentInterval * 2
+				if currentInterval > maxInterval {
+					currentInterval = maxInterval
+				}
+			}
 		}
 	}
 }
 
-func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Categorizer) {
+func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Categorizer) bool {
 	var threshold float64
 	db.QueryRow("SELECT categorization_confidence_threshold FROM settings WHERE id = 1").Scan(&threshold)
 	if threshold == 0 {
@@ -38,7 +47,7 @@ func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Ca
 		LIMIT 20`)
 	if err != nil {
 		log.Printf("categorizer: query error: %v", err)
-		return
+		return false
 	}
 	defer rows.Close()
 
@@ -50,7 +59,7 @@ func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Ca
 	}
 	log.Printf("categorizer: found %d uncategorized captures", len(captures))
 	if len(captures) == 0 {
-		return
+		return false
 	}
 
 	mRows, err := db.QueryContext(ctx, `
@@ -58,7 +67,7 @@ func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Ca
 		FROM matters m JOIN clients c ON m.client_id = c.id
 		WHERE m.is_active = 1`)
 	if err != nil {
-		return
+		return true // had captures but couldn't fetch matters
 	}
 	defer mRows.Close()
 
@@ -69,7 +78,7 @@ func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Ca
 		matters = append(matters, m)
 	}
 	if len(matters) == 0 {
-		return
+		return true
 	}
 
 	cRows, err := db.QueryContext(ctx, `
@@ -77,7 +86,7 @@ func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Ca
 		FROM corrections co JOIN matters m ON co.to_matter_id = m.id
 		ORDER BY co.created_at DESC LIMIT 50`)
 	if err != nil {
-		return
+		return true
 	}
 	defer cRows.Close()
 
@@ -91,7 +100,7 @@ func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Ca
 	results, err := cat.Categorize(captures, matters, corrections)
 	if err != nil {
 		log.Printf("categorizer worker: %v", err)
-		return
+		return true
 	}
 
 	for _, r := range results {
@@ -105,4 +114,6 @@ func processCategorizationBatch(ctx context.Context, db *sql.DB, cat services.Ca
 				r.Confidence, r.CaptureID)
 		}
 	}
+
+	return true
 }

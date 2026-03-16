@@ -1,7 +1,4 @@
 use chrono::Utc;
-use image::ImageEncoder;
-use image::codecs::jpeg::JpegEncoder;
-use std::io::Cursor;
 
 pub struct CaptureResult {
     pub image_data: Vec<u8>,
@@ -11,10 +8,15 @@ pub struct CaptureResult {
 }
 
 fn encode_jpeg(rgb: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
-    let mut jpeg_buf = Cursor::new(Vec::new());
-    let encoder = JpegEncoder::new_with_quality(&mut jpeg_buf, 50);
+    use image::{ImageEncoder, RgbImage, imageops::FilterType};
+
+    let img = RgbImage::from_raw(width, height, rgb.to_vec())?;
+    let resized = image::imageops::resize(&img, width / 2, height / 2, FilterType::Triangle);
+
+    let mut jpeg_buf = std::io::Cursor::new(Vec::new());
+    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_buf, 50);
     encoder
-        .write_image(rgb, width, height, image::ExtendedColorType::Rgb8)
+        .write_image(resized.as_raw(), width / 2, height / 2, image::ExtendedColorType::Rgb8)
         .ok()?;
     Some(jpeg_buf.into_inner())
 }

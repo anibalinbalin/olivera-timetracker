@@ -105,6 +105,15 @@ pub fn run() {
         .expect("error running TimeTracker agent");
 }
 
+fn full_hash(data: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for &b in data.iter() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
 fn simple_hash(data: &[u8]) -> u64 {
     // Fast non-crypto hash — just need to detect identical images
     let mut h: u64 = 0xcbf29ce484222325;
@@ -159,7 +168,8 @@ fn capture_loop(config: AppConfig) {
                     result.app_name,
                     &result.window_title[..result.window_title.len().min(50)]
                 );
-                match uploader::upload_capture(&uploader_config, &result) {
+                let image_hash = format!("{:x}", full_hash(&result.image_data));
+                match uploader::upload_capture(&uploader_config, &result, &image_hash) {
                     Ok(()) => println!("  → Uploaded"),
                     Err(e) => {
                         println!("  → Upload failed ({}), buffering", e);
@@ -192,7 +202,8 @@ fn flush_buffer(buffer: &OfflineBuffer, config: &uploader::UploaderConfig) {
             window_title,
             timestamp,
         };
-        match uploader::upload_capture(config, &result) {
+        let image_hash = format!("{:x}", full_hash(&result.image_data));
+        match uploader::upload_capture(config, &result, &image_hash) {
             Ok(()) => {
                 let _ = buffer.dequeue(id);
             }

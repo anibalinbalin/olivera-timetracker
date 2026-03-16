@@ -51,15 +51,75 @@ func CreateCapture(db *sql.DB, screenshotDir string) http.HandlerFunc {
 			}
 		}
 
+		imageHash := r.FormValue("image_hash")
+
+		// Dedup: if image_hash matches a prior completed capture, copy OCR results
+		if imageHash != "" && len(imgData) > 0 {
+			var matchID int64
+			var matchOCRText sql.NullString
+			var matchOCRStatus string
+			var matchMatterID sql.NullInt64
+			var matchConfidence sql.NullFloat64
+			err := db.QueryRowContext(r.Context(),
+				`SELECT id, ocr_text, ocr_status, matter_id, ai_confidence FROM captures
+				 WHERE image_hash = ? AND ocr_status = 'COMPLETED' AND user_id = ? LIMIT 1`,
+				imageHash, userID,
+			).Scan(&matchID, &matchOCRText, &matchOCRStatus, &matchMatterID, &matchConfidence)
+			if err == nil {
+				// Found a match — insert with copied OCR data, skip screenshot save
+				var ocrTextArg, matterArg, confArg any
+				if matchOCRText.Valid {
+					ocrTextArg = matchOCRText.String
+				}
+				if matchMatterID.Valid {
+					matterArg = matchMatterID.Int64
+				}
+				if matchConfidence.Valid {
+					confArg = matchConfidence.Float64
+				}
+
+				res, err := db.ExecContext(r.Context(),
+					`INSERT INTO captures (user_id, timestamp, app_name, window_title, ocr_text, ocr_status, matter_id, ai_confidence, image_hash)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					userID, ts, appName, windowTitle, ocrTextArg, "COMPLETED", matterArg, confArg, imageHash,
+				)
+				if err != nil {
+					WriteError(w, http.StatusInternalServerError, "db insert failed")
+					return
+				}
+				captureID, _ := res.LastInsertId()
+
+				c := models.Capture{
+					ID:          captureID,
+					UserID:      userID,
+					Timestamp:   ts,
+					AppName:     appName,
+					WindowTitle: windowTitle,
+					OCRStatus:   "COMPLETED",
+				}
+				if matchOCRText.Valid {
+					c.OCRText = &matchOCRText.String
+				}
+				if matchMatterID.Valid {
+					c.MatterID = &matchMatterID.Int64
+				}
+				if matchConfidence.Valid {
+					c.AIConfidence = &matchConfidence.Float64
+				}
+				WriteJSON(w, http.StatusCreated, c)
+				return
+			}
+		}
+
 		// Insert capture row first (no screenshot_path yet)
 		ocrStatus := "PENDING"
 		if len(imgData) == 0 {
 			ocrStatus = "COMPLETED" // no image = skip OCR
 		}
 		res, err := db.ExecContext(r.Context(),
-			`INSERT INTO captures (user_id, timestamp, app_name, window_title, ocr_status)
-			 VALUES (?, ?, ?, ?, ?)`,
-			userID, ts, appName, windowTitle, ocrStatus,
+			`INSERT INTO captures (user_id, timestamp, app_name, window_title, ocr_status, image_hash)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			userID, ts, appName, windowTitle, ocrStatus, sql.NullString{String: imageHash, Valid: imageHash != ""},
 		)
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, "db insert failed")
@@ -96,7 +156,7 @@ func CreateCapture(db *sql.DB, screenshotDir string) http.HandlerFunc {
 			AppName:        appName,
 			WindowTitle:    windowTitle,
 			ScreenshotPath: screenshotPath,
-			OCRStatus:      "PENDING",
+			OCRStatus:      ocrStatus,
 		}
 		WriteJSON(w, http.StatusCreated, c)
 	}

@@ -1,5 +1,11 @@
 package db
 
+import (
+	"database/sql"
+	"log"
+	"strings"
+)
+
 const schema = `
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,3 +95,26 @@ CREATE INDEX IF NOT EXISTS idx_corrections_user ON corrections(user_id);
 
 INSERT OR IGNORE INTO settings(id) VALUES(1);
 `
+
+func RunMigrations(db *sql.DB) {
+	migrations := []string{
+		"ALTER TABLE captures ADD COLUMN image_hash TEXT",
+		"ALTER TABLE captures ADD COLUMN ocr_text_hash TEXT",
+	}
+	for _, m := range migrations {
+		_, err := db.Exec(m)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			log.Printf("migration warning: %v", err)
+		}
+	}
+
+	indexes := []string{
+		"CREATE INDEX IF NOT EXISTS idx_captures_image_hash ON captures(image_hash)",
+		"CREATE INDEX IF NOT EXISTS idx_captures_ocr_text_hash ON captures(ocr_text_hash)",
+	}
+	for _, idx := range indexes {
+		if _, err := db.Exec(idx); err != nil {
+			log.Printf("migration index warning: %v", err)
+		}
+	}
+}

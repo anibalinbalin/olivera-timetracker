@@ -7,12 +7,13 @@ pub struct UploaderConfig {
     pub user_id: u32,
 }
 
-pub fn upload_capture(config: &UploaderConfig, capture: &CaptureResult) -> Result<(), String> {
+pub fn upload_capture(config: &UploaderConfig, capture: &CaptureResult, image_hash: &str) -> Result<(), String> {
     let form = multipart::Form::new()
         .text("app_name", capture.app_name.clone())
         .text("window_title", capture.window_title.clone())
         .text("user_id", config.user_id.to_string())
         .text("timestamp", capture.timestamp.clone())
+        .text("image_hash", image_hash.to_string())
         .part(
             "image",
             multipart::Part::bytes(capture.image_data.clone())
