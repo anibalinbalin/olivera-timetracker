@@ -15,41 +15,44 @@ type OCRClient interface {
 }
 
 type RunPodOCR struct {
-	Endpoint string // e.g. https://POD_ID-8000.proxy.runpod.net
-	APIKey   string // not needed for pod proxy, kept for future serverless
+	Endpoint string // e.g. https://api.runpod.ai/v2/ENDPOINT_ID
+	APIKey   string
 }
 
 func (r *RunPodOCR) Extract(imageData []byte) (string, error) {
 	b64 := base64.StdEncoding.EncodeToString(imageData)
 	dataURL := "data:image/jpeg;base64," + b64
 
-	// DeepSeek-OCR via vLLM OpenAI-compatible API
-	// 10x compression at 97% accuracy vs GLM-OCR
+	// DeepSeek-OCR via RunPod Serverless (vLLM worker)
+	// The worker accepts OpenAI-compatible input wrapped in RunPod's format
 	payload := map[string]any{
-		"model": "deepseek-ai/DeepSeek-OCR",
-		"messages": []map[string]any{
-			{
-				"role": "user",
-				"content": []map[string]any{
-					{"type": "image_url", "image_url": map[string]string{"url": dataURL}},
-					{"type": "text", "text": "Free OCR."},
+		"input": map[string]any{
+			"openai_route":  "/v1/chat/completions",
+			"openai_input": map[string]any{
+				"model": "deepseek-ai/DeepSeek-OCR",
+				"messages": []map[string]any{
+					{
+						"role": "user",
+						"content": []map[string]any{
+							{"type": "image_url", "image_url": map[string]string{"url": dataURL}},
+							{"type": "text", "text": "Free OCR."},
+						},
+					},
 				},
+				"max_tokens":  2048,
+				"temperature": 0.0,
 			},
 		},
-		"max_tokens":  2048,
-		"temperature": 0.0,
 	}
 	body, _ := json.Marshal(payload)
 
-	client := &http.Client{Timeout: 120 * time.Second}
-	req, err := http.NewRequest("POST", r.Endpoint+"/v1/chat/completions", bytes.NewReader(body))
+	client := &http.Client{Timeout: 300 * time.Second}
+	req, err := http.NewRequest("POST", r.Endpoint+"/runsync", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if r.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+r.APIKey)
-	}
+	req.Header.Set("Authorization", "Bearer "+r.APIKey)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -63,21 +66,29 @@ func (r *RunPodOCR) Extract(imageData []byte) (string, error) {
 		return "", fmt.Errorf("ocr returned %d: %s", resp.StatusCode, string(respBody)[:min(200, len(respBody))])
 	}
 
-	var chatResp struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+	// RunPod wraps the vLLM response in { "output": { ...openai response... } }
+	var runpodResp struct {
+		Status string `json:"status"`
+		Output struct {
+			Choices []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			} `json:"choices"`
+		} `json:"output"`
 	}
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+	if err := json.Unmarshal(respBody, &runpodResp); err != nil {
 		return "", fmt.Errorf("parse response: %w", err)
 	}
 
-	if len(chatResp.Choices) == 0 {
+	if runpodResp.Status == "FAILED" {
+		return "", fmt.Errorf("runpod job failed: %s", string(respBody)[:min(200, len(respBody))])
+	}
+
+	if len(runpodResp.Output.Choices) == 0 {
 		return "", fmt.Errorf("no choices in response")
 	}
-	return chatResp.Choices[0].Message.Content, nil
+	return runpodResp.Output.Choices[0].Message.Content, nil
 }
 
 func min(a, b int) int {
