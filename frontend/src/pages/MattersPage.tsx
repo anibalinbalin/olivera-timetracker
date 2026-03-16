@@ -83,9 +83,9 @@ function MatterRow({ matter }: { matter: Matter }) {
   const deleteMatter = useDeleteMatter()
 
   function handleSave() {
-    if (!name.trim() || !number.trim()) return
+    if (!name.trim()) return
     updateMatter.mutate(
-      { id: matter.id, name: name.trim(), matter_number: number.trim(), description: desc.trim() || undefined },
+      { id: matter.id, name: name.trim(), matter_number: number.trim() || undefined, description: desc.trim() || undefined },
       { onSuccess: () => setEditing(false) }
     )
   }
@@ -106,7 +106,7 @@ function MatterRow({ matter }: { matter: Matter }) {
         >
           <div className="grid grid-cols-2 gap-2">
             <Field label="Name" value={name} onChange={setName} required />
-            <Field label="Matter #" value={number} onChange={setNumber} required />
+            <Field label="Matter #" value={number} onChange={setNumber} placeholder="Auto-generated" />
           </div>
           <Field label="Description" value={desc} onChange={setDesc} placeholder="Optional" />
         </InlineForm>
@@ -153,9 +153,9 @@ function AddMatterForm({ clientId, onDone }: { clientId: number; onDone: () => v
   const createMatter = useCreateMatter()
 
   function handleSubmit() {
-    if (!name.trim() || !number.trim()) return
+    if (!name.trim()) return
     createMatter.mutate(
-      { client_id: clientId, name: name.trim(), matter_number: number.trim(), description: desc.trim() || undefined },
+      { client_id: clientId, name: name.trim(), matter_number: number.trim() || undefined, description: desc.trim() || undefined },
       { onSuccess: () => { setName(''); setNumber(''); setDesc(''); onDone() } }
     )
   }
@@ -165,7 +165,7 @@ function AddMatterForm({ clientId, onDone }: { clientId: number; onDone: () => v
       <InlineForm onCancel={onDone} onSubmit={handleSubmit} isPending={createMatter.isPending} submitLabel="Add Matter">
         <div className="grid grid-cols-2 gap-2">
           <Field label="Name" value={name} onChange={setName} placeholder="Matter name" required />
-          <Field label="Matter #" value={number} onChange={setNumber} placeholder="M-2024-001" required />
+          <Field label="Matter #" value={number} onChange={setNumber} placeholder="Auto-generated" />
         </div>
         <Field label="Description" value={desc} onChange={setDesc} placeholder="Optional" />
       </InlineForm>
@@ -185,9 +185,9 @@ function ClientCard({ client, matters }: { client: Client; matters: Matter[] }) 
   const deleteClient = useDeleteClient()
 
   function handleSaveClient() {
-    if (!name.trim() || !code.trim()) return
+    if (!name.trim()) return
     updateClient.mutate(
-      { id: client.id, name: name.trim(), code: code.trim() },
+      { id: client.id, name: name.trim(), code: code.trim() || undefined },
       { onSuccess: () => setEditing(false) }
     )
   }
@@ -219,12 +219,6 @@ function ClientCard({ client, matters }: { client: Client; matters: Matter[] }) 
               onChange={e => setName(e.target.value)}
               placeholder="Client name"
             />
-            <input
-              className="h-7 rounded-md border border-gray-300 bg-white px-2 text-sm font-mono uppercase outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 w-28"
-              value={code}
-              onChange={e => setCode(e.target.value.toUpperCase())}
-              placeholder="CODE"
-            />
             <Button size="sm" onClick={handleSaveClient} disabled={updateClient.isPending}>
               <FloppyDiskIcon size={14} />
               Save
@@ -237,7 +231,6 @@ function ClientCard({ client, matters }: { client: Client; matters: Matter[] }) 
         ) : (
           <div className="flex-1 flex items-center gap-2">
             <span className="font-semibold text-gray-900">{client.name}</span>
-            <span className="text-xs font-mono text-gray-500 bg-gray-200 rounded px-1.5 py-0.5">{client.code}</span>
             <span className="text-xs text-gray-400">
               {clientMatters.length} matter{clientMatters.length !== 1 ? 's' : ''}
             </span>
@@ -295,19 +288,16 @@ function AddClientForm({ onDone }: { onDone: () => void }) {
   const createClient = useCreateClient()
 
   function handleSubmit() {
-    if (!name.trim() || !code.trim()) return
+    if (!name.trim()) return
     createClient.mutate(
-      { name: name.trim(), code: code.trim().toUpperCase() },
+      { name: name.trim(), code: code.trim().toUpperCase() || undefined },
       { onSuccess: () => { setName(''); setCode(''); onDone() } }
     )
   }
 
   return (
     <InlineForm onCancel={onDone} onSubmit={handleSubmit} isPending={createClient.isPending} submitLabel="Add Client">
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Client Name" value={name} onChange={setName} placeholder="Smith Corp" required />
-        <Field label="Code" value={code} onChange={v => setCode(v.toUpperCase())} placeholder="SMITH" required />
-      </div>
+      <Field label="Client Name" value={name} onChange={setName} placeholder="e.g. Los Griegos" required />
     </InlineForm>
   )
 }

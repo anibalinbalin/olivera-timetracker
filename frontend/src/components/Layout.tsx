@@ -3,8 +3,8 @@ import { Home01Icon, FolderOpenIcon, Settings01Icon } from 'hugeicons-react'
 
 const navItems = [
   { to: '/', icon: Home01Icon, label: 'Dashboard' },
-  { to: '/matters', icon: FolderOpenIcon, label: 'Asuntos' },
-  { to: '/settings', icon: Settings01Icon, label: 'Configuración' },
+  { to: '/matters', icon: FolderOpenIcon, label: 'Matters' },
+  { to: '/settings', icon: Settings01Icon, label: 'Settings' },
 ]
 
 export function Layout() {
@@ -36,6 +36,10 @@ export function Layout() {
               {label}
             </NavLink>
           ))}
+        </div>
+        {/* Version */}
+        <div className="mt-auto px-5 pb-4">
+          <span className="text-white/30 text-xs">v{__APP_VERSION__}</span>
         </div>
       </nav>
       <main className="flex-1 overflow-auto" style={{ backgroundColor: 'var(--warm-white)' }}>

@@ -6,12 +6,14 @@ mod uploader;
 use buffer::OfflineBuffer;
 use config::AppConfig;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
 };
 
 static PAUSED: AtomicBool = AtomicBool::new(false);
+static BACKEND_CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -52,15 +54,20 @@ pub fn run() {
             let config = AppConfig::load();
             let dashboard_url = config.dashboard_url.clone();
 
+            // Start backend server automatically
+            start_backend();
+
             // Build tray menu
-            let pause_item = MenuItemBuilder::with_id("pause", "Pausar captura").build(app)?;
-            let dashboard_item = MenuItemBuilder::with_id("dashboard", "Abrir Dashboard").build(app)?;
-            let quit_item = MenuItemBuilder::with_id("quit", "Salir").build(app)?;
+            let pause_item = MenuItemBuilder::with_id("pause", "Pause Capture").build(app)?;
+            let dashboard_item = MenuItemBuilder::with_id("dashboard", "Open Dashboard").build(app)?;
+            let backend_item = MenuItemBuilder::with_id("restart_backend", "Restart Server").build(app)?;
+            let quit_item = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
             let menu = MenuBuilder::new(app)
                 .item(&pause_item)
                 .separator()
                 .item(&dashboard_item)
+                .item(&backend_item)
                 .separator()
                 .item(&quit_item)
                 .build()?;
@@ -68,7 +75,7 @@ pub fn run() {
             let dashboard_url_clone = dashboard_url.clone();
 
             let _tray = TrayIconBuilder::new()
-                .tooltip("Olivera TimeTracker — Capturando")
+                .tooltip("Olivera TimeTracker — Capturing")
                 .menu(&menu)
                 .on_menu_event(move |_app, event| {
                     match event.id().as_ref() {
@@ -83,7 +90,13 @@ pub fn run() {
                         "dashboard" => {
                             let _ = open::that(&dashboard_url_clone);
                         }
+                        "restart_backend" => {
+                            println!("Restarting backend server...");
+                            stop_backend();
+                            start_backend();
+                        }
                         "quit" => {
+                            stop_backend();
                             std::process::exit(0);
                         }
                         _ => {}
@@ -186,6 +199,76 @@ fn capture_loop(config: AppConfig) {
                 println!("Capture failed");
             }
         }
+    }
+}
+
+fn backend_dir() -> std::path::PathBuf {
+    // Look for server.exe next to the agent, or in C:\olivera-timetracker
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_default();
+    let candidates = [
+        exe_dir.join("server.exe"),
+        std::path::PathBuf::from(r"C:\olivera-timetracker\server.exe"),
+    ];
+    for c in &candidates {
+        if c.exists() {
+            return c.parent().unwrap().to_path_buf();
+        }
+    }
+    std::path::PathBuf::from(r"C:\olivera-timetracker")
+}
+
+fn start_backend() {
+    let dir = backend_dir();
+    let server_exe = dir.join("server.exe");
+    let start_bat = dir.join("start.bat");
+
+    if !server_exe.exists() {
+        println!("Backend server.exe not found at {:?}", server_exe);
+        return;
+    }
+
+    // Use start.bat if it exists (has env vars), otherwise run server.exe directly
+    let child = if start_bat.exists() {
+        std::process::Command::new("cmd")
+            .args(["/C", start_bat.to_str().unwrap()])
+            .current_dir(&dir)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+    } else {
+        std::process::Command::new(&server_exe)
+            .current_dir(&dir)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+    };
+
+    match child {
+        Ok(c) => {
+            println!("Backend started (PID: {})", c.id());
+            *BACKEND_CHILD.lock().unwrap() = Some(c);
+        }
+        Err(e) => println!("Failed to start backend: {}", e),
+    }
+}
+
+fn stop_backend() {
+    if let Some(mut child) = BACKEND_CHILD.lock().unwrap().take() {
+        let _ = child.kill();
+        let _ = child.wait();
+        println!("Backend stopped");
+    }
+    // Also kill any orphaned server.exe
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/f", "/im", "server.exe"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
     }
 }
 

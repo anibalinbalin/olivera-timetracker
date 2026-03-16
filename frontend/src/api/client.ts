@@ -1,5 +1,5 @@
 const BASE = '/api'
-const API_KEY = 'test' // TODO: replace with session auth
+const API_KEY = 'olivera2026'
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {

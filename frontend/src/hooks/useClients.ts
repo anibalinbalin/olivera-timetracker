@@ -12,7 +12,7 @@ export function useClients() {
 export function useCreateClient() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { name: string; code: string }) =>
+    mutationFn: (data: { name: string; code?: string }) =>
       api<Client>('/clients', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['clients'] }),
   })

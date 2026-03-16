@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/olivera/timetracker/internal/models"
@@ -43,9 +44,12 @@ func CreateClient(db *sql.DB) http.HandlerFunc {
 			WriteError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
-		if body.Name == "" || body.Code == "" {
-			WriteError(w, http.StatusBadRequest, "name and code required")
+		if body.Name == "" {
+			WriteError(w, http.StatusBadRequest, "name required")
 			return
+		}
+		if body.Code == "" {
+			body.Code = strings.ToUpper(body.Name[:min(3, len(body.Name))])
 		}
 
 		res, err := db.ExecContext(r.Context(),
@@ -84,9 +88,12 @@ func UpdateClient(db *sql.DB) http.HandlerFunc {
 			WriteError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
-		if body.Name == "" || body.Code == "" {
-			WriteError(w, http.StatusBadRequest, "name and code required")
+		if body.Name == "" {
+			WriteError(w, http.StatusBadRequest, "name required")
 			return
+		}
+		if body.Code == "" {
+			body.Code = strings.ToUpper(body.Name[:min(3, len(body.Name))])
 		}
 
 		_, err = db.ExecContext(r.Context(),

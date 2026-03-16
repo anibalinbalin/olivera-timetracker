@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -56,9 +57,16 @@ func CreateMatter(db *sql.DB) http.HandlerFunc {
 			WriteError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
-		if body.ClientID == 0 || body.Name == "" || body.MatterNumber == "" {
-			WriteError(w, http.StatusBadRequest, "client_id, name, and matter_number required")
+		if body.ClientID == 0 || body.Name == "" {
+			WriteError(w, http.StatusBadRequest, "client_id and name required")
 			return
+		}
+		if body.MatterNumber == "" {
+			// Auto-generate: M-{clientID}-{sequential}
+			var count int
+			db.QueryRowContext(r.Context(),
+				`SELECT COUNT(*) FROM matters WHERE client_id = ?`, body.ClientID).Scan(&count)
+			body.MatterNumber = fmt.Sprintf("M-%d-%03d", body.ClientID, count+1)
 		}
 
 		res, err := db.ExecContext(r.Context(),
@@ -100,8 +108,8 @@ func UpdateMatter(db *sql.DB) http.HandlerFunc {
 			WriteError(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
-		if body.Name == "" || body.MatterNumber == "" {
-			WriteError(w, http.StatusBadRequest, "name and matter_number required")
+		if body.Name == "" {
+			WriteError(w, http.StatusBadRequest, "name required")
 			return
 		}
 

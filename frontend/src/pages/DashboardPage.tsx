@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { format, addDays, subDays } from 'date-fns'
-import { es } from 'date-fns/locale'
+
 import { ArrowLeft01Icon, ArrowRight01Icon, CheckmarkCircle02Icon, Download01Icon, Tick01Icon } from 'hugeicons-react'
 import { useEntries, useGenerateEntries, useUpdateEntry, useUpdateEntryStatus } from '@/hooks/useEntries'
 import { useCaptures, useReassignCapture } from '@/hooks/useCaptures'
@@ -10,7 +10,6 @@ import { matterColor } from '@/lib/colors'
 import { MatterSelect } from '@/components/MatterSelect'
 import type { TimeEntry, Capture, Matter, Client } from '@/types'
 
-const GOAL_HOURS = 8
 
 function formatHours(minutes: number): string {
   return (minutes / 60).toFixed(1)
@@ -36,7 +35,7 @@ function EditableDescription({
     return (
       <button
         type="button"
-        aria-label="Editar descripción"
+        aria-label="Edit description"
         onClick={() => {
           setDraft(value)
           setEditing(true)
@@ -46,7 +45,7 @@ function EditableDescription({
         {value ? (
           <span className="text-sm text-pretty" style={{ color: 'var(--near-black)' }}>{value}</span>
         ) : (
-          <span className="text-sm italic text-gray-400 text-pretty">Agregar descripción…</span>
+          <span className="text-sm italic text-gray-400 text-pretty">Add description…</span>
         )}
       </button>
     )
@@ -72,7 +71,7 @@ function EditableDescription({
         }
       }}
       rows={2}
-      aria-label="Descripción de la entrada"
+      aria-label="Entry description"
       className="w-full text-sm rounded-md px-2 py-1 outline-none resize-none"
       style={{
         border: '1px solid var(--neutral)',
@@ -174,7 +173,7 @@ function ClientCard({
                 {/* Approve toggle */}
                 <button
                   type="button"
-                  aria-label={matterApproved ? 'Desaprobar' : 'Aprobar entrada'}
+                  aria-label={matterApproved ? 'Unapprove' : 'Approve entry'}
                   onClick={() => {
                     entries.forEach(e => {
                       if (matterApproved) {
@@ -207,7 +206,7 @@ function ClientCard({
                     }
                   }}
                 >
-                  {matterApproved ? '✓ Aprobado' : 'Aprobar'}
+                  {matterApproved ? '✓ Approved' : 'Approve'}
                 </button>
               </div>
             </div>
@@ -237,7 +236,7 @@ function UncategorizedCard({
       <div className="flex items-center justify-between px-5 py-3">
         <div className="flex items-center gap-2">
           <span className="text-amber-600" aria-hidden="true">⚠</span>
-          <span className="font-semibold text-amber-800">Sin categorizar</span>
+          <span className="font-semibold text-amber-800">Uncategorized</span>
         </div>
         <span className="text-sm font-medium text-amber-600 tabular-nums">
           {formatHours(totalMinutes)}h
@@ -337,7 +336,6 @@ export default function DashboardPage() {
   // Total hours
   const totalMinutes = entries.reduce((s, e) => s + e.duration_minutes, 0)
   const totalHours = totalMinutes / 60
-  const progressPct = Math.min((totalHours / GOAL_HOURS) * 100, 100)
 
   const handleToggleApprove = useCallback(
     (id: number) => {
@@ -364,7 +362,7 @@ export default function DashboardPage() {
   const handleApproveAll = () => {
     const pending = entries.filter(e => e.status !== 'APPROVED')
     if (pending.length === 0) return
-    if (!window.confirm(`¿Aprobar ${pending.length} entradas?`)) return
+    if (!window.confirm(`Approve ${pending.length} entries?`)) return
     pending.forEach(e => handleToggleApprove(e.id))
   }
 
@@ -372,13 +370,13 @@ export default function DashboardPage() {
     const params = new URLSearchParams({ from: dateStr, to: dateStr, status: 'APPROVED' })
     const res = await fetch(`/api/entries/export?${params}`, {
       credentials: 'include',
-      headers: { 'X-API-Key': 'test' },
+      headers: { 'X-API-Key': 'olivera2026' },
     })
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `horas-${dateStr}.csv`
+    a.download = `hours-${dateStr}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -393,7 +391,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              aria-label="Día anterior"
+              aria-label="Previous day"
               onClick={() => setDate(d => subDays(d, 1))}
               className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-[background-color,color] focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:outline-none"
             >
@@ -401,13 +399,13 @@ export default function DashboardPage() {
             </button>
             <h1 className="text-lg font-semibold text-balance" style={{ color: 'var(--navy)' }}>
               {(() => {
-                const formatted = format(date, "EEEE, d 'de' MMMM", { locale: es })
+                const formatted = format(date, 'EEEE, MMMM d')
                 return formatted.charAt(0).toUpperCase() + formatted.slice(1)
               })()}
             </h1>
             <button
               type="button"
-              aria-label="Día siguiente"
+              aria-label="Next day"
               onClick={() => setDate(d => addDays(d, 1))}
               className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-[background-color,color] focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:outline-none"
             >
@@ -419,29 +417,20 @@ export default function DashboardPage() {
 
         {/* Summary bar */}
         <div className="space-y-2">
-          <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold tabular-nums" style={{ color: 'var(--navy)' }}>
-              Hoy: {totalHours.toFixed(1)} horas
-            </span>
-            <span className="text-sm text-gray-400">{GOAL_HOURS}h meta</span>
-          </div>
-          <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--neutral)' }}>
-            <div
-              className="h-full rounded-full transition-[width] duration-500"
-              style={{ width: `${progressPct}%`, backgroundColor: 'var(--gold)' }}
-            />
-          </div>
+          <span className="text-2xl font-bold tabular-nums" style={{ color: 'var(--navy)' }}>
+            Today: {totalHours.toFixed(1)} hours
+          </span>
         </div>
 
         {/* Loading state */}
         {isLoading && (
-          <div className="text-center py-12 text-gray-400 text-sm">Cargando…</div>
+          <div className="text-center py-12 text-gray-400 text-sm">Loading…</div>
         )}
 
         {/* Generating state */}
         {generateEntries.isPending && (
           <div className="text-center py-8 text-gray-400 text-sm">
-            Generando entradas…
+            Generating entries…
           </div>
         )}
 
@@ -470,8 +459,8 @@ export default function DashboardPage() {
         {/* Empty state */}
         {!isLoading && !generateEntries.isPending && entries.length === 0 && uncategorized.length === 0 && (
           <div className="text-center py-16 text-gray-400">
-            <p className="text-lg text-balance">Sin actividad registrada</p>
-            <p className="text-sm mt-1 text-pretty">Las capturas aparecerán aquí automáticamente</p>
+            <p className="text-lg text-balance">No activity recorded</p>
+            <p className="text-sm mt-1 text-pretty">Captures will appear here automatically</p>
           </div>
         )}
 
@@ -488,7 +477,7 @@ export default function DashboardPage() {
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--navy)' }}
             >
               <Tick01Icon size={16} aria-hidden="true" />
-              Aprobar todo
+              Approve All
             </button>
             <button
               type="button"
@@ -505,7 +494,7 @@ export default function DashboardPage() {
               }}
             >
               <Download01Icon size={16} aria-hidden="true" />
-              Exportar CSV
+              Export CSV
             </button>
           </div>
         )}
@@ -540,7 +529,7 @@ function buildClientGroups(
   for (const [clientId, matterEntries] of byClient) {
     const client = clientMap.get(clientId) ?? {
       id: clientId,
-      name: entries.find(e => e.client_name && matterMap.get(e.matter_id)?.client_id === clientId)?.client_name ?? `Cliente ${clientId}`,
+      name: entries.find(e => e.client_name && matterMap.get(e.matter_id)?.client_id === clientId)?.client_name ?? `Client ${clientId}`,
       code: '',
       is_active: true,
       created_at: '',
@@ -553,7 +542,7 @@ function buildClientGroups(
           matter: matterMap.get(matterId) ?? {
             id: matterId,
             client_id: clientId,
-            name: es[0]?.matter_name ?? `Asunto ${matterId}`,
+            name: es[0]?.matter_name ?? `Matter ${matterId}`,
             matter_number: es[0]?.matter_number ?? '',
             is_active: true,
             created_at: '',

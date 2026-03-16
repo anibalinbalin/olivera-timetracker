@@ -15,7 +15,7 @@ export function useCreateMatter() {
     mutationFn: (data: {
       client_id: number
       name: string
-      matter_number: string
+      matter_number?: string
       description?: string
     }) => api<Matter>('/matters', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['matters'] }),
